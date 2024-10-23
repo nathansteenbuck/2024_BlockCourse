@@ -1,0 +1,41 @@
+---
+title: "07_CellTypesComparison_cells_Compressed"
+author: "Nathan Steenbuck"
+date: "Created: 23 Oct, 2024; Compiled: `r format(Sys.time(), '%d %b, %')`"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: inline
+---
+
+
+# **Goal**
+
+- Cell Type attributions between the Compressed and Uncompressed datasets are compared in this script.
+
+## Steps:
+- Read in both datasets.
+- Compare the cell type attributions between the two datasets per ROI.
+- Visualize the differences.
+- Calculate statistics per linear mixed-effects model.
+- If time: compare potential beta-cell loss between stages, or increase in T-Cells (CD4+/CD8+)
+- Save the results.
+
+
+```{r setup, include=FALSE}
+script_name <- "07_CellTypesComparison_cells_Compressed.Rmd"
+
+source(file.path("/", "Users", "nathan", "2024_BlockCourse", "T1D_analysis", "helpers.R"))
+n_cores <- 2
+future::plan(future::multicore(workers = n_cores))
+paths <- getPaths(script_name)
+knitr::opts_knit$set(root_dir = paths$cluster_home)
+do_print <- TRUE
+
+seed <- 123456
+set.seed(seed)
+options <- furrr::furrr_options(seed = seed)
+paths$prev <- paste("06_CellTypes", paths$object_type, paths$panel_type, sep = "_")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#FIXME: write script.
