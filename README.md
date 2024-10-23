@@ -17,4 +17,5 @@ Analysis:
 - Spillover Compensation, Data Transformation, Quality Control, Cell Annotation
 - Comparison of compressed and Uncompressed dataset.
 
-
+## Setup:
+Check DirectoryStructure.md for how to organize your directory structure including data and code!
