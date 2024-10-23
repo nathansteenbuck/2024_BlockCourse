@@ -1,3 +1,85 @@
+---
+title: "03_TransformCorrect_cells_Islet"
+author: "Nathan Steenbuck"
+date: "Created: 23 Oct, 2024; Compiled: `r format(Sys.time(), '%d %b, %Y')`"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+script_name <- "03_TransformCorrect_cells_Islet.Rmd"
+
+source(file.path("/", "Users", "nathan", "2024_BlockCourse", "T1D_analysis", "helpers.R"))
+n_cores <- 2
+future::plan(future::multicore(workers = n_cores))
+paths <- getPaths(script_name)
+knitr::opts_knit$set(root_dir = paths$cluster_home)
+do_print <- TRUE
+
+# Misc. Settings.
+seed <- 123456
+set.seed(seed)
+options <- furrr::furrr_options(seed = seed)
+options(future.globals.maxSize = 40 * 1024 * 1024 * 1024)
+knitr::opts_chunk$set(echo = TRUE)
+paths$prev <- paste("02_SpilloverCompensation", paths$object_type, paths$panel_type, sep = "_")
+```
+
+
+
+# **Goals**
+
+**1. Counts transformations**  
+IMC data can be transformed to achieve more symmetric intensity distributions with more similar ranges across markers.  
+
+**2. Batch correction**
+Batch correction can correct potential technical variation between samples before applying clustering algorithms. 
+Here, [fastMNN](https://marionilab.github.io/FurtherMNN2018/theory/description.html) is used to correct for batch effects.
+
+
+
+# **Settings**  
+
+## Load packages
+
+```{r packages, results='hide'}
+suppressPackageStartupMessages(c(
+  library(SpatialExperiment),
+  library(dplyr),
+  library(batchelor),
+  library(BiocParallel),
+  library(harmony),
+  library(tictoc),
+  library(ggplot2),
+  library(scater),
+  library(tictoc)
+))
+```
+
+## Paths and settings
+
+```{r settings}
+# Paths
+if (!dir.exists(paths$folder_script)) dir.create(paths$folder_script)
+plotsave_param$path <- paths$folder_script
+plotsave_param_large$path <- paths$folder_script
+
+# Misc settings
+today <- gsub("-", "", Sys.Date())
+```
+
+##  Read in the data
+
+Import the SpatialExperiment (SPE) object generated in the first analysis script.
+
+```{r load-data}
+fn_spe <- file.path(paths$folder_out, paths$prev, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
+spe <- readRDS(fn_spe)
+print(spe)
+```
+
+
 
 ## Remove uncompensated counts
 

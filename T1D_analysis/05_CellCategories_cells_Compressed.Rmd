@@ -10,6 +10,13 @@ editor_options:
 ```{r setup, include=FALSE}
 script_name <- "05_CellCategories_cells_Compressed.Rmd"
 
+source(file.path("/", "Users", "nathan", "2024_BlockCourse", "T1D_analysis", "helpers.R"))
+n_cores <- 2
+future::plan(future::multicore(workers = n_cores))
+paths <- getPaths(script_name)
+knitr::opts_knit$set(root_dir = paths$cluster_home)
+do_print <- TRUE
+
 seed <- 123456
 set.seed(seed)
 options <- furrr::furrr_options(seed = seed)
