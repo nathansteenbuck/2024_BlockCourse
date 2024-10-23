@@ -20,4 +20,5 @@ Major to dos:
 - Adjust paths also in Region Selection scripts -> Uncompressed/Compressed.
 - Adjust helper.R
 - 01 - remove stuff for graphs.
+- 05/06 difference in channels used.
 
