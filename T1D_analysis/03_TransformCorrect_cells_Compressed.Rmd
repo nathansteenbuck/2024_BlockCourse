@@ -1,0 +1,66 @@
+
+## Remove uncompensated counts
+
+Remove `raw` (uncompensated) counts (not needed anymore).
+
+```{r remove-raw-counts}
+if ("raw" %in% assayNames(spe)) {
+  assay(spe, "raw") <- NULL
+}
+```
+
+
+
+# **Data transformation**
+
+IMC data can be transformed to achieve more symmetric intensity distributions with more similar ranges across markers. 
+In line with CyTOF data, IMC data is often arcsinh-transformed. 
+However, the choice of the so called "cofactor" has to be adjusted for IMC data due its lower average intensity. 
+IMC data are often arcsinh-transformed using a cofactor of 1. 
+
+## Arcsinh transformation
+
+Here, we will arsinh transform the data using a cofactor of 1.  
+Other transormation methods, such as log transformation can also be used. 
+For visualization purpose, arcsinh-transformed data can be further scaled using z-score standardization.
+
+### Cell counts
+
+```{r asinh-transf}
+# Arcsinh
+if (!"exprs" %in% assayNames(spe))
+  assay(spe, "exprs") <- asinh(counts(spe) / 1)
+```
+
+## Quantile normalization
+
+Alternatively, the raw data can be scaled between 0 and 1 after clipping outlying intensities to the 99.9th percentile value.
+
+### Cell counts
+
+```{r scaled-transf}
+# Define the censor value
+censor_val <- 0.999
+
+# Calculate quantile
+if (!"scaled" %in% assayNames(spe)) {
+  quant <- apply(assay(spe, "counts"), 1, quantile, probs = censor_val)
+  
+  # Normalize
+  assay(spe, "scaled") <- apply(assay(spe, "counts"), 2, function(x) x / quant)
+  
+  # Clip values 0-1
+  assay(spe, "scaled")[assay(spe, "scaled") > 1] <- 1
+  assay(spe, "scaled")[assay(spe, "scaled") < 0] <- 0
+}
+```
+
+## Save the updated SPE object
+
+Contains the new counts transformations.
+
+```{r save-sce1}
+print(assayNames(spe))
+fn_spe <- file.path(paths$folder_script, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
+saveRDS(spe, fn_spe)
+```
