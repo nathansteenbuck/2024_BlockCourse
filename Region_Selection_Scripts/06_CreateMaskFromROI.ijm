@@ -2,7 +2,8 @@
  * GENERATE MASK FROM ROIs
  * Nicolas Damond - 13 Februrary 2020
  */
- 
+
+ 
 
 // *** GOALS ***
 // 1. Read-in the ROI set defined at the previous step.
@@ -16,8 +17,8 @@
 
 // Parameters (adapt if needed)
 enlargement = 50;  // Pixel expansion factor (40 pixels ~= 25 micrometers)
-panel_base = "Islet"; // panel used to define the original ROIs
-panels = newArray("Islet", "Immune"); // all panels
+panel_base = "Uncompressed"; // panel used to define the original ROIs
+panels = newArray("Uncompressed", "Compressed"); // all panels
 
 // Prompt the user to provide an input folder 
 input_dir = getDirectory("Input Directory");  // The input folder should be the "BASE" directory
@@ -32,7 +33,8 @@ folderlist = getFileList(input_dir);
 processFolderNames(input_dir, folderlist);
 // Remove tagged (NaN) files from the list (folders that don't correspond to a caseID)
 folderlist = Array.delete(folderlist, NaN);
-
+
+
 // Loop through files, define input/output directories and call functions
 for(i=0; i < folderlist.length; i++) {
 	cur_case = "" + folderlist[i];

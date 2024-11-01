@@ -15,7 +15,7 @@
 // *** INPUT SETTINGS ***
 
 // Parameters
-panel_to_crop = "Islet"; // Base panel (on which the ROIs are selected)
+panel_to_crop = "Uncompressed"; // Base panel (on which the ROIs are selected)
 
 // Prompt the user to provide an input folder 
 input_dir = getDirectory("Input Directory");  // The input folder should be the "BASE" directory

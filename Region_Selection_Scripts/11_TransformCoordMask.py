@@ -7,17 +7,13 @@ from register_virtual_stack import Transform_Virtual_Stack_MT
 # Parameters
 
 ## Change the input directory ("BASE" folder), and the case and panel lists if needed
-input_dir = "/Users/nathan/Downloads/region_selection"
-caseList = (["6034"])
+input_dir = "/Users/nathan/BlockCourse/"
+caseList = (["6227"]) # ADJUST THIS.
 
-#("6036", "6055", "6090", "6147", "6225", "6228",
-#"6303", "6321", "6388", "6396", "6414", "6421", "6428",
-#"6437", "6458", "6510", "6519", "6521", "6522", "6526",
-#"6532", "6547", "6550", "6553", "6558", "6562", "6563") 
 # Use this format to process multiple cases: ("6289", "6310", "6328") 
 # Use this format to process a single case: (["6450"])
-panels = (["Immune"])  # Use this format to process multiple panels (do not include the base panel): ("Islet2", "Lympho", "Myelo")  # Use this format to process a single panel: (["Immune"])
-panel_base = "Islet" # Base panel (used to define the ROIs)
+panels = (["Compressed"])  # Use this format to process multiple panels (do not include the base panel): ("Islet2", "Lympho", "Myelo")  # Use this format to process a single panel: (["Immune"])
+panel_base = "Uncompressed" # Base panel (used to define the ROIs)
 img_ext = ".tif" # Image extension
 
 ###############

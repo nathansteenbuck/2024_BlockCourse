@@ -11,7 +11,7 @@
   
 // Parameters (modify if needed)
 islet_channel = "Cy5"; // Slide scanner channel containing the islet marker
-panel_to_crop = "Islet"; // Crop only images from this panel
+panel_to_crop = "Uncompressed"; // Crop only images from this panel
 file_ext = ".tif";  // extension of the single channel slide scanner images
 crop_nb = 2;  // number of crops to make per case
 cropX = 1000;  // size of the crops (x-axis)

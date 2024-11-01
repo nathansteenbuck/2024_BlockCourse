@@ -16,7 +16,7 @@
 filext = ".tif";
 delimiter1 = "_"; // Character that separates the CaseID from the Panel in the .tif image names.
 delimiter2 = "-"; // Character that separates the Panel from the Channel in the .tif image names.
-panel_base = "Islet"; // Panel used to define the ROIs
+panel_base = "Uncompressed"; // Panel used to define the ROIs
 
 // Change the channel order and names if needed
 redch = "Cy5";

@@ -2,7 +2,8 @@
  * TRANSFORM ROI COORDINATES
  * Nicolas Damond - 14 Februrary 2020
  */
- 
+
+ 
 // *** GOALS ***
 // Interactive script to adapt the ROI from non-base panels after automated registration.
 // 1. Load the registered masks for non-base panels. 
@@ -14,12 +15,12 @@
 // *** INPUT SETTINGS ***
 
 // Parameters (adapt if needed)
-panel_base = "Islet"; // panel used to define the ROIs
-panels = newArray("Islet", "Immune"); // enter all panels, including the base panel
+panel_base = "Uncompressed"; // panel used to define the ROIs
+panels = newArray("Uncompressed", "Compressed"); // enter all panels, including the base panel
 panels_islet = newArray(); // enter other "Islet" type panels here in case there are any (otherwise leave the array empty). DO NOT include the "base" panel here!
 
-enlarge_Islet = 50;  // Enlargement factor for the islet panel(s) (this enlargement factor will be applied to any panel in the "panels_islet" array above.
-enlarge_Immune = 80;  // Enlargement factor for the other panel(s) (this enlargement factor will be applied to all the other panels).
+enlarge_Uncompressed = 50;  // Enlargement factor for the islet panel(s) (this enlargement factor will be applied to any panel in the "panels_islet" array above.
+enlarge_Compressed = 80;  // Enlargement factor for the other panel(s) (this enlargement factor will be applied to all the other panels).
 file_ext = ".tif";
 
 
@@ -89,10 +90,10 @@ function convertCoordinates(cur_mask_fn, cur_mask_path, dir_base, cur_case, cur_
 
 			// Enlarge the ROIs by the enlarge_Immune factor, unless the current panel is in the panels_islet list.
 			for(m=0; m < panels.length; m++) {
-				enlargement = enlarge_Immune;
+				enlargement = enlarge_Compressed;
 				for(n=0; n < panels_islet.length; n++) {
 					if(cur_panel.matches(panels_islet[n])) {
-						enlargement = enlarge_Islet;
+						enlargement = enlarge_Uncompressed;
 					}
 				}
 			}
@@ -199,7 +200,8 @@ function convertCoordinates(cur_mask_fn, cur_mask_path, dir_base, cur_case, cur_
 	saveAs("Results", fn_csv);
 	run("Clear Results");
 }
-
+
+
 // List all files in the input folder.
 //     -> if the file is not a folder, modify to NaN (tag for deletion).
 //     ->  if the folder name doesn't correspond to a caseID, modify to NaN (tag for deletion).

@@ -14,9 +14,10 @@
 // *** INPUT SETTINGS ***
 
 // Parameters (adapt if needed)
-panel_base = "Islet" // panel used to define the ROIs
-panels = newArray("Islet", "Immune"); // enter all panels, including the base panel
-file_ext = ".tif";
+panel_base = "Uncompressed" // panel used to define the ROIs
+panels = newArray("Uncompressed", "Compressed"); // enter all panels, including the base panel
+
+file_ext = ".tif";
 
 // Prompt the user to provide an input folder
 input = getDirectory("Input Directory");

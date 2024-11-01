@@ -7,10 +7,11 @@ from register_virtual_stack import Transform_Virtual_Stack_MT
 # Parameters
 
 ## Change the input directory ("BASE" folder), and the case and panel lists if needed
-input_dir = "/Users/nathan/Downloads/region_selection"
-caseList = ("6034", "6036", "6043", "6044", "6048") # Use this format to process multiple cases: ("6289", "6310", "6328") # Use this format to process a single case: (["6450"])
-panels = (["Immune"])  # Use this format to process multiple panels (do not include the base panel): ("Islet2", "Lympho", "Myelo")  # Use this format to process a single panel: (["Immune"])
-panel_base = "Islet" # Base panel (used to define the ROIs)
+## CHANGE THE caseLIST and input_dir!!
+input_dir = "/Users/nathan/BlockCourse/"
+caseList = ("6227", "6396") # Use this format to process multiple cases: ("6289", "6310", "6328") # Use this format to process a single case: (["6450"])
+panels = (["Compressed"])  # Use this format to process multiple panels (do not include the base panel): ("Islet2", "Lympho", "Myelo")  # Use this format to process a single panel: (["Immune"])
+panel_base = "Uncompressed" # Base panel (used to define the ROIs)
 img_ext = ".tif" # Image extension
 
 ###############
@@ -53,7 +54,8 @@ for case in caseList:
 		shutil.copy2(merged_img_panel, subdir_merged)
 		
 		# Transform merged images
-		Transform_Virtual_Stack_MT.exec(subdir_merged, dir_registered, subdir_transf, True)
+
+		Transform_Virtual_Stack_MT.exec(subdir_merged, dir_registered, subdir_transf, True)
 		IJ.run("Close")
 		
 		# Removed the copied merged images

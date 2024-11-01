@@ -12,8 +12,8 @@
 // *** INPUT SETTINGS ***
 
 // Panels (adapt if needed)
-panel_base = "Islet" // panel used to define the original ROIs
-panels = newArray("Islet", "Immune"); // all panels
+panel_base = "Uncompressed" // panel used to define the original ROIs
+panels = newArray("Uncompressed", "Compressed"); // all panels
 
 // Prompt the user to provide an input folder
 input = getDirectory("Input Directory");
@@ -57,7 +57,7 @@ for(i=0; i < folderlist.length; i++) {
 			// Create the mask
 			if(cur_panel.matches(panel_base)) {
 				// Open the previously defined set of coordinates
-				fn_roi = dir_base + File.separator + cur_case + "_Coordinates_Islet.zip";
+				fn_roi = dir_base + File.separator + cur_case + "_Coordinates_Uncompressed.zip";
 				roiManager("Open", fn_roi);
 				
 				// Create and save the coordinate mask

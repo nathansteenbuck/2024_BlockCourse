@@ -13,7 +13,7 @@
 // *** INPUT SETTINGS ***
 
 // Parameters
-panel_base = "Islet"; // Panel on which the islets are selected
+panel_base = "Uncompressed"; // Panel on which the islets are selected
 nb_rois = 125;  // Number of ROIs to return (randomly subsetted from all identified ROIs)
 file_ext = ".tiff";  // extension of the single channel slide scanner images
 delimiter = "_";  // file name delimiter
