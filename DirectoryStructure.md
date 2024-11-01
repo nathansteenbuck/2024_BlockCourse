@@ -55,16 +55,16 @@ Brief summaries for the directories are provided in the README files.
 ## IF data
 
 Download the immuno-fluorescence data.
+Ask your supervisors for the SwitchDrive link.
 The directory is named RegionSelection and should contain the IF images.
-1) FIXME: I think we have to provide them the data via SwitchDrive.
-2) FIXME: Also, check the  
 
 The path should be:
-*~/BlockCourse/RegionSelection/*
+*~/BlockCourse/region_selection/*
 
 ## IMC data
 
 Download the IMC data.
+Ask your supervisors for the SwitchDrive link.
 The directory should be named: "processing" and should contain the raw IMC images.
 
 The path should be:
@@ -80,7 +80,11 @@ The path should be:
 
 ## Full directory structure:
 
-#FIXME: edit.
+BlockCourse
+|_ results <- containing analysis results
+|_ processing  <- containing IMC results
+|_ region_selection <- containing IF Region Selection data + results
+|_ 2024_BlockCourse <- cotaining all code
 
 
 
