@@ -1,5 +1,31 @@
 # Install Computational Packages and Applications
 
+## Conda and Python
+
+### Setup Conda:
+Go to this link and follow the instruction: 
+https://docs.anaconda.com/miniconda/miniconda-install/
+
+Make a new conda environment using the following command:
+
+```{bash}
+conda create -n BlockCourse python=3.10
+```
+When prompted to install further packages, press "y".
+
+Then, activate the newly created Conda environment 
+and install the appropriate packages required to run the two Juypter notebooks. 
+
+```{bash}
+conda activate BlockCourse
+conda install -c conda-forge jupyter path pandas notebook scikit-image
+```
+
+Start the notebook from your command line:
+```{bash}
+jupyter notebook 
+```
+
 ## Install R
 
 ### Download R 
@@ -49,7 +75,6 @@ BiocManager::install("batchelor")
 ```
 
 FIXME: ADD other packages here.
-
 
 ## Install R-Studio
 
