@@ -8,7 +8,7 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-script_name <- "03_TransformCorrect_cells_Compressed.Rmd"
+script_name <- "03_TransformCorrect_cells_Uncompressed.Rmd"
 
 source(file.path("/", "mnt", "central_nas", "projects", 
                  "type1_diabetes", "nathan", "BlockCourse", "2024_BlockCourse", "T1D_analysis", 

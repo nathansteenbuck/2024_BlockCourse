@@ -8,10 +8,12 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-script_name <- "02_SpilloverCompensation_cells_Compressed"
+script_name <- "02_SpilloverCompensation_cells_Compressed.Rmd"
 cur_user <- Sys.info()[["user"]]
 
-source(file.path("/", "Users", "nathan", "2024_BlockCourse", "T1D_analysis", "helpers.R"))
+source(file.path("/", "mnt", "central_nas", "projects", 
+                 "type1_diabetes", "nathan", "BlockCourse", "2024_BlockCourse", "T1D_analysis", 
+                "helpers.R"))
 n_cores <- 2
 future::plan(future::multicore(workers = n_cores))
 paths <- getPaths(script_name)
@@ -26,7 +28,8 @@ knitr::opts_chunk$set(echo = TRUE)
 paths$prev <- paste("01_ImportData", paths$object_type, paths$panel_type, sep = "_")
 ```
 
-
+You can run this script as: 
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/03_TransformCorrect_cells_Compressed.Rmd')"
 
 # **Goals**
 
@@ -82,7 +85,7 @@ Import the SpatialExperiment (SPE) object generated in the first analysis
 script.
 
 ```{r load-data}
-fn_spe <- file.path(paths$folder_out, paths$prev, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
+fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 spe <- readRDS(fn_spe)
 print(spe)
 ```
