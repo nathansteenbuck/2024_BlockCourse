@@ -74,6 +74,10 @@ BiocManager::install("imcRtools")
 BiocManager::install("batchelor")
 ```
 
+```{r}
+install.packages("tidyverse")
+```
+
 FIXME: ADD other packages here.
 
 ## Install R-Studio
