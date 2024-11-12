@@ -36,9 +36,7 @@ Perform quality controls on cell-level data.
 - Number of cells and images per condition  
 - Density plots  
 - 90th percentile per channel
-- Heatmaps  
-- Low-level representations: PCA, MDS, MNF  
-- Shannon entropy / ion counts  
+- Heatmaps
 
 **Dimensionality reduction**  
 - UMAP  
@@ -204,6 +202,7 @@ p <- cur_dat |>
              x = as.factor(donor_type),
              color = as.factor(donor_type))) +
   geom_boxplot(outlier.shape = NA) +
+  geom_point()+
   expand_limits(y = 0) +
   scale_color_manual(values = palettes$stages) +
   labs(color = "T1D stage", x = NULL, y = "Number of images per case") +
@@ -248,6 +247,7 @@ p <- cur_dat |>
              x = as.factor(donor_type),
              color = as.factor(donor_type))) +
   geom_boxplot(outlier.shape = NA) +
+  geom_point()+
   expand_limits(y = 0) +
   scale_color_manual(values = palettes$stages) +
   labs(color = "T1D stage", x = NULL, y = "Number of cells per case") +
@@ -410,6 +410,8 @@ purrr::map(.x = assay_sel, \(cur_assay) {
 })
 ```
 
+Q: Do you observe differences in the 90th percentile between cases and stages?
+How can we interpret them?
 
 ## Heatmaps
 
@@ -418,7 +420,6 @@ purrr::map(.x = assay_sel, \(cur_assay) {
 Interactive heatmaps of feature expression are generated using the [heatmaply package](https://github.com/talgalili/heatmaply).
 Aggregated both by stage and case.
 
--> Should work when more than 1 case.
 ```{r heatmap-case-stage}
 hmlist <- list()
 hmlist <- replicate(n = length(plot_variables2), expr = list())
@@ -497,32 +498,10 @@ purrr::walk(assay_sel_mean, \(cur_assay) {
                     cluster_cols = FALSE,
                     main = paste("Heatmap", "NotScaled", cur_assay,
                                  sep = " - "),
-                    annotation_colors = list(case_id = palettes$cases[1],
-                                             donor_type = palettes$stages[1]),
-                    genes = channels)
-  fn <- paste0(paste(today, "HeatmapDitto", "NotScaled",
-                     cur_assay, sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, h), plotsave_param))
-})
-```
-
-Centered and scaled mean marker intensities
-
-```{r dittoheatmap-centered-scaled}
-purrr::walk(assay_sel_mean, \(cur_assay) {
-  h <- dittoHeatmap(sce_mean, assay = cur_assay,
-                    annot.by = c("case_id", "donor_type"),
-                    order.by = match(cases, sce_mean$case_id),
-                    heatmap.colors = colorRampPalette(
-                    c("dark blue", "white", "dark red"))(100),
-                    cluster_cols = FALSE,
-                    main = paste("Heatmap", "Cent + Scaled", cur_assay,
-                                 sep = " - "),
                     annotation_colors = list(case_id = palettes$cases,
                                              donor_type = palettes$stages),
-                    breaks = seq(-3, 3, length.out = 101),
                     genes = channels)
-  fn <- paste0(paste(today, "HeatmapDitto", "CenteredScaled",
+  fn <- paste0(paste(today, "HeatmapDitto", "NotScaled",
                      cur_assay, sep = "_"), ".png")
   do.call(ggsave, c(list(fn, h), plotsave_param))
 })
@@ -609,7 +588,6 @@ spe_sub$ImageName <- gsub(image_extension, "", spe_sub$image_fullname)
 Inspect the images.
 ```{r display-images}
 library(cytoviewer)
-spe_sub[[clust_name]] <- as.factor(spe_sub[[clust_name]])
 app <- cytoviewer(image = images, 
                   mask = masks, 
                   object = spe_sub,
@@ -621,6 +599,8 @@ if (interactive()) {
 }
 ```
 
+Q: What can you observe in the images?
+Q: Do you see the previously identified differences in marker expression between the donors?  
 
 ## Image-level quality control
 
@@ -636,6 +616,8 @@ This definition of the SNR is just one of many and other measures can be applied
 Finding a threshold that separates pixels containing signal and pixels containing noise is not trivial and different approaches can be chosen. Here, we use the otsu thresholding approach to find pixels of the “foreground” (i.e., signal) and “background” (i.e., noise). The SNR is then defined as the mean intensity of foreground pixels divided by the mean intensity of background pixels. We compute this measure as well as the mean signal intensity per image. 
 The plot below shows the average SNR versus the average signal intensity across all images.
 
+Note 1: The SNR is calculated on the pixel level and not on the cell level.
+Note 2: The fitting can fail on the image-level, which produces Infinity values.
 ```{r snr-images}
 library(tidyverse)
 library(ggrepel)
@@ -856,6 +838,9 @@ purrr::walk(assay_sel, \(cur_assay) {
 }, .progress = TRUE)
 ```
 
+Questions:
+Do you see differences on the UMAPs?
+If so, what does that mean?
 
 ### Plot marker expression
 

@@ -1,5 +1,5 @@
 ---
-title: "02_SpilloverCompensation_cells_Uncompressed"
+title: "02_SpilloverCompensation_cells_Compressed"
 author: "Nathan Steenbuck"
 date: "Created: 23 Oct, 2024; Compiled: `r format(Sys.time(), '%d %b, %Y')`"
 output: workflowr::wflow_html
@@ -8,7 +8,7 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-script_name <- "02_SpilloverCompensation_cells_Uncompressed.Rmd"
+script_name <- "02_SpilloverCompensation_cells_Compressed.Rmd"
 cur_user <- Sys.info()[["user"]]
 
 source(file.path("/", "mnt", "central_nas", "projects", 

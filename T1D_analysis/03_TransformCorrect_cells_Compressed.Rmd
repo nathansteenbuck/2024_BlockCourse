@@ -29,6 +29,8 @@ paths$prev <- paste("02_SpilloverCompensation", paths$object_type, paths$panel_t
 ```
 
 
+The script can be run directly from the command line with:
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/03_TransformCorrect_cells_Compressed.Rmd')"
 
 # **Goals**
 

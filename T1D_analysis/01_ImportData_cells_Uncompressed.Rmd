@@ -38,7 +38,7 @@ All cell-level data are stored in a [SpatialExperiment (SPE)](https://bioconduct
 object that will be used by downstream analysis scripts.  
 
 This script can be from the 
-Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/01_ImportData_cells_Compressed.Rmd')"
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/01_ImportData_cells_Uncompressed.Rmd')"
 
 ## Key variables
 
