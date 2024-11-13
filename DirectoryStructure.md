@@ -58,9 +58,6 @@ Download the immuno-fluorescence data.
 Ask your supervisors for the SwitchDrive link.
 The directory is named RegionSelection and should contain the IF images.
 
-The path should be:
-*~/BlockCourse/region_selection/*
-
 ## IMC data
 
 Download the IMC data.
