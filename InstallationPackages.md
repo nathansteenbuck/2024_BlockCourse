@@ -18,7 +18,7 @@ and install the appropriate packages required to run the two Juypter notebooks.
 
 ```{bash}
 conda activate BlockCourse
-conda install -c conda-forge jupyter path pandas notebook scikit-image matplotlib napari-imc
+conda install -c conda-forge jupyter path pandas notebook scikit-image matplotlib napari pyqt napari-imc
 ```
 
 Start the notebook from your command line:
