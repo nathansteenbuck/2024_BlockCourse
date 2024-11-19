@@ -285,8 +285,7 @@ summarize_heatmap <- function(x, expr_values, cluster_by, channels = NULL, fun =
 plot_dim_red <- function(dat, dimred, color_by, sample = TRUE,
                          size = 0.1, alpha = 0.5, axes_labels = c("Reduced dim 1", "Reduced dim 2"),
                          palette = NULL, palette_continuous = FALSE) {
-  if (sample == TRUE)
-    dat <- dat[sample(nrow(dat)), ]
+  if (sample == TRUE) dat <- dat[sample(nrow(dat)), ]
 
   p <- dat |>
     ggplot2::ggplot(ggplot2::aes(x = get(paste0(dimred, ".1")),
