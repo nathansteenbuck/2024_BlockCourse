@@ -81,6 +81,11 @@ print(spe)
 ```
 
 
+```{r convert-to-sce}
+# Remove 6399.
+spe <- spe[, colData(spe)$case_id != "6399"]
+
+```
 
 # **Clustering**
 
@@ -165,27 +170,27 @@ clust_method <- c("Pheno1")
 
 # Number of nearest-neighbors
 k <- 30
+cur_assay <- "scaled"
 
 # Run Phenograph - PhenoGraph for exprs and scaled assay.
-purrr::map(assay_sel, \(cur_assay) {
-  clust_name <- paste(clust_method, cur_assay, sep = "_")
-  writeLines(c("\n", clust_name))
 
-  if (!clust_name %in% colnames(colData(sce))) {
-    set.seed(seed)
-    # Run Rphenograph.
-    cur_pheno_annoy <- Rphenoannoy::Rphenoannoy(t(assay(sce, cur_assay)), k = k)
+clust_name <- paste(clust_method, cur_assay, sep = "_")
+writeLines(c("\n", clust_name))
 
-    cur_pheno <- DataFrame(cur_pheno_annoy[[2]]$membership)
-    colnames(cur_pheno) <- clust_name
-    rownames(cur_pheno) <- colnames(assay(sce, cur_assay))
+if (!clust_name %in% colnames(colData(sce))) {
+  set.seed(seed)
+  # Run Rphenograph.
+  cur_pheno_annoy <- Rphenoannoy::Rphenoannoy(t(assay(sce, cur_assay))[, channels_clust], k = k)
 
-    # Add Phenograph clusters to the colData of the SCE object
-    # Cluster `0` is attributed to non-subsetted cells and not islet cells
-    colData(sce)[, clust_name] <<- cur_pheno
-    remove(cur_pheno)
+  cur_pheno <- DataFrame(cur_pheno_annoy[[2]]$membership)
+  colnames(cur_pheno) <- clust_name
+  rownames(cur_pheno) <- colnames(assay(sce, cur_assay))
+
+  # Add Phenograph clusters to the colData of the SCE object
+  # Cluster `0` is attributed to non-subsetted cells and not islet cells
+  colData(sce)[, clust_name] <- cur_pheno
+  remove(cur_pheno)
   }
-})
 ```
 
 # **Visualize clusters**
@@ -202,14 +207,56 @@ suppressPackageStartupMessages(c(
 
 
 ## Visualize clusters on reduced dimensions
+RUN UMAP again.
+
+
+```{r subset-spe}
+set.seed(222)
+if (!("subset" %in% names(metadata(sce)))) {
+  # Cells per case
+  nb_cells <- 7500
+  
+  # Subset the SPE object (nb_cells per case)
+  cell_subset <- tibble(rn = rownames(colData(sce)),
+                        case_id = colData(sce)$case_id) |> 
+    group_by(case_id) |>
+    sample_n(nb_cells) |> 
+    pull(rn)
+  
+  # Keep the subset cell ids in SPE metadata
+  metadata(sce)[["subset"]] <- sort(as.vector(cell_subset))
+}
+
+# Keep only the selected cells and channels
+spe_sub <- sce[channels_clust, metadata(sce)[["subset"]]]
+```
+
+```{r run-UMAP}
+# Add UMAPs to SPE object
+cur_assay <- "scaled"
+dimred_name <- paste("UMAP", cur_assay, sep = "_")
+print(dimred_name)
+
+# Run UMAP on a cell subset
+if ((!dimred_name %in% reducedDimNames(spe_sub)) && ("UMAP" %in% dimred_sel)) {
+  # Extract Counts. 
+  if (cur_assay %in% assayNames(spe_sub)) {
+    counts <- t(assay(spe_sub, cur_assay))
+  }
+  # Run UMAP.
+  umap_model <- uwot::umap(counts, ret_model = TRUE)
+  # Extract Embedding.
+  cur_umap <- umap_model$embedding
+  colnames(cur_umap) <- c("UMAP1", "UMAP2")
+  rownames(cur_umap) <- rownames(counts)
+}
+
+reducedDim(spe_sub, dimred_name) <- cur_umap
+```
 
 ```{r dimred-clusters}
 cur_method <- "Pheno1"
-cur_dimred <- "UMAP"
-cur_assay <- "scaled"
-cur_dat <- makePerCellDF(sce, use_dimred = TRUE) |>
-  dplyr::mutate(case_id = factor(case_id, levels = meta$cases),
-                donor_type = factor(donor_type, levels = meta$stages)) |>
+cur_dat <- makePerCellDF(spe_sub, use_dimred = TRUE) |>
   dplyr::arrange(case_id, donor_type)  |> 
   tibble::as_tibble()
 
@@ -219,56 +266,20 @@ clust_name <- paste(cur_method, cur_assay, sep = "_")
 # Plot all clustersdat, dimred, color_by
 p <- plot_dim_red(dat = cur_dat, dimred = dimred_name, color_by = clust_name,
                   sample = TRUE, size = 0.1, alpha = 1)
-if (do_print) print(p)
+print(p)
 fn <- paste0(paste(today, "Clusters", clust_name, cur_dimred,
                     sep = "_"), ".png")
 do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
 
 
-## Distribution of marker expression by cluster
-
-```{r violin-clusters-markers, message=FALSE, warning=FALSE, fig.width=15, fig.height=10}
-clust_name <- paste(cur_method, cur_assay, sep = "_")
-print(clust_name)
-sce[[clust_name]] <- as.factor(sce[[clust_name]])
-
-if (cur_assay %in% SummarizedExperiment::assayNames(sce)) {
-    cur_dat <- scuttle::makePerCellDF(sce, assay.type = cur_assay,
-                                      features = channels_clust, use.dimred = FALSE)
-}
-
-cur_dat <- melt.data.table(
-  as.data.table(cur_dat),
-  id.vars = c("image_number", "cell_number", clust_name),
-  measure.vars = channels_clust,
-  variable.name = "channel",
-  value.name = cur_assay
-)
-cur_dat[, MeanExprs := mean(get(cur_assay)),
-        by = c("channel", clust_name)]
-
-p <- plot_violin(cur_dat, x = "channel", y = cur_assay,
-                  fill_by = "MeanExprs", facet_by = clust_name,
-                  title = clust_name) +
-  theme(axis.text.x = element_text(size = 8, angle = 90))
-if (do_print) suppressMessages(print(p))
-fn <- paste0(paste(today, "Clusters", clust_name, "Violins",
-                    sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p), plotsave_param_large))
-```
-
-
 ## Heatmap of marker expression by cluster
 ```{r heatmap-clusters-markers}
-hmlist <- list()
-n <- 1
 name_cur_assay <- "scaled"
 clust_name <- paste(cur_method, cur_assay, sep = "_")
 message(clust_name)
-message(name_cur_assay)
-# Summarize the data
 
+# Summarize the data
 hm <- summarize_heatmap(sce,
                         expr_values = name_cur_assay,
                         cluster_by = clust_name,
@@ -277,32 +288,13 @@ hm <- summarize_heatmap(sce,
 # Display the heatmap
 fn <- paste0(paste(today, "Clusters", clust_name, "Heatmap",
                     sep = "_"), ".html")
-print(fn)
-hmlist[[n]] <- heatmaply(
+heatmaply(
     heatmaply::normalize(hm), main = clust_name, 
     file = file.path(paths$folder_script, fn))
-n <- n + 1
 
 # remove all clusters with less than 10 cells and plot again.
 clust_freq <- table(colData(sce)[[clust_name]])
-keep_clusts <- names(clust_freq)[clust_freq >= 10]
-sce_isl_sub <- sce[, colData(sce)[[clust_name]] %in% keep_clusts]
-
-hm <- summarize_heatmap(sce_isl_sub,
-                        expr_values = name_cur_assay,
-                        cluster_by = clust_name,
-                        channels = channels_clust)
-# Display the reduced heatmap -> this improves the visualization.
-# Otherwise heatmap is scaled by expression of outliers.
-fn <- paste0(paste(today, "Clusters", clust_name, "Heatmap_reduced",
-                    sep = "_"), ".html")
-print(fn)
-hmlist[[n]] <- heatmaply(
-    heatmaply::normalize(hm), main = clust_name, 
-    file = file.path(paths$folder_script, fn))
-n <- n + 1
-
-htmltools::tagList(setNames(hmlist, NULL))
+clust_freq
 ```
 
 
@@ -316,7 +308,7 @@ Additional information we can use is their spatial localization of cell types, i
 ### Select cluster(s) and assay to show
 
 ```{r viz-clust-select}
-viz_clust <- NULL # Select cluster(s) to visualize.
+viz_clust <- c(2, 4) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "scaled"
 ```
@@ -344,14 +336,14 @@ if (!is.null(viz_clust)) {
                             paths$panel_type, "whole-cell")
 
   # Load images and masks
-  images <- yoloader(
+  images <- imgloader(
     x = sce_viz,
     image_dir = folder_images,
     image_names = image_sub,
     type = "stacks"
   )
 
-  masks <- yoloader(
+  masks <- imgloader(
     x = sce_viz,
     image_dir = folder_masks,
     image_names = image_sub,
@@ -368,7 +360,7 @@ if (!is.null(viz_clust)) {
 
 ```{r viz-cluster-cytoviewer}
 # Use cytoviewer with images, masks and object
-# library(cytoviewer)
+library(cytoviewer)
 if (!is.null(viz_clust)) {
   channels_view <- channels_clust
   sub_images <- cytomapper::getChannels(images, channels_view)
@@ -415,26 +407,28 @@ clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-clust_alpha <- c(17,11)
-clust_beta  <- c(16)
-clust_delta <- c(13)
+clust_alpha <- c(23, 15)
+clust_beta  <- c(19)
+clust_delta <- c(17)
 clust_gamma <- c(22)
+clust_islet_other <- c(24)
 
 # Immune cells.
-clust_lympho <- c(7)
+clust_t <- c(10)
 clust_myeloid <- c(6) # CD68
-clust_neutrophil <- c() # MPO?
+clust_neutrophil <- c(7) # MPO?
 
 # Exocrine Cells.
-clust_ductal <- c(3, 12, 20)
-clust_acinar <- c(19, 8, 9, 2, 14, 5, 15)
+clust_ductal <- c(16, 20)
+clust_acinar <- c(3, 5, 12, 4, 14, 11, 2, 8)
 clust_endothelial <- c(1) #CD31
-clust_mesenchymal <- c()
-clust_other <- c(10,18,4,21) #
+clust_mesenchymal <- c(13)
+clust_other <- c(9, 18, 21) # 
 
 all_clust <- sort(c(clust_alpha, clust_beta, clust_delta, clust_gamma,
-                    clust_lympho, clust_myeloid, clust_neutrophil,
-                    clust_ductal, clust_acinar, clust_endothelial, clust_other))
+                    clust_t, clust_myeloid, clust_neutrophil,
+                    clust_ductal, clust_acinar, clust_endothelial, 
+                    clust_other, clust_mesenchymal, clust_islet_other))
 
 if ((!length(unique(all_clust)) ==
      length(unique(colData(sce)[, clust_name]))) ||
@@ -445,61 +439,71 @@ if ((!length(unique(all_clust)) ==
 # Add cell types to the SCE object
 # Islet
 colData(sce)[colData(sce)[, clust_name] %in% clust_alpha,
-             "CellType"] <- "Alpha"
+             "cell_type"] <- "Alpha"
 colData(sce)[colData(sce)[, clust_name] %in% clust_beta,
-              "CellType"] <- "Beta"
+              "cell_type"] <- "Beta"
 colData(sce)[colData(sce)[, clust_name] %in% clust_delta,
-              "CellType"] <- "Delta"
+              "cell_type"] <- "Delta"
 colData(sce)[colData(sce)[, clust_name] %in% clust_gamma,
-               "CellType"]<- "Gamma"
+               "cell_type"]<- "Gamma"
+colData(sce)[colData(sce)[, clust_name] %in% clust_islet_other,
+              "cell_type"] <- "Islet_Other"
+
 # Immune:
-colData(sce)[colData(sce)[, clust_name] %in% clust_lympho,
-             "CellType"] <- "Lympho"
+colData(sce)[colData(sce)[, clust_name] %in% clust_t,
+             "cell_type"] <- "T_cell"
 colData(sce)[colData(sce)[, clust_name] %in% clust_myeloid,
-             "CellType"] <- "Myeloid"
+             "cell_type"] <- "Myeloid"
 colData(sce)[colData(sce)[, clust_name] %in% clust_neutrophil,
-              "CellType"] <- "Neutrophil"
+              "cell_type"] <- "Neutrophil"
+
 # Exocrine
 colData(sce)[colData(sce)[, clust_name] %in% clust_ductal,
-              "CellType"] <- "Ductal"
+              "cell_type"] <- "Ductal"
 colData(sce)[colData(sce)[, clust_name] %in% clust_acinar,
-              "CellType"] <- "Acinar"
+              "cell_type"] <- "Acinar"
+
 # Stroma:
 colData(sce)[colData(sce)[, clust_name] %in% clust_endothelial,
-              "CellType"] <- "Endothelial"
+              "cell_type"] <- "Endothelial"
 colData(sce)[colData(sce)[, clust_name] %in% clust_mesenchymal,
-              "CellType"] <- "Fibro_Endo"
+              "cell_type"] <- "Fibro_SM"
+
 # Other
 colData(sce)[colData(sce)[, clust_name] %in% clust_other,
-              "CellType"] <- "Other"
+              "cell_type"] <- "Other"
 ```
 
 Assign Cell Categories base don the assigned cell types.
 ```{r cell_cats}
 # Islet-category (Alpha, Beta, Delta, Gamma)
-colData(sce)[colData(sce)[, "CellType"] %in% c("Alpha", "Beta", "Delta", "Gamma"),
-             "CellCat"] <- "Islet"
+colData(sce)[colData(sce)[, "cell_type"] %in% c("Alpha", "Beta", "Delta", "Gamma", "Islet_Other"),
+             "cell_category"] <- "Islet"
+
 # Immune-category (Lympho, Myeloid, Neutrophil)
-colData(sce)[colData(sce)[, "CellType"] %in% c("Lympho", "Myeloid", "Neutrophil"),
-             "CellCat"] <- "Immune"
+colData(sce)[colData(sce)[, "cell_type"] %in% c("T_cell", "Myeloid", "Neutrophil"),
+             "cell_category"] <- "Immune"
+
 # Exocrine-category (Ductal, Acinar)
-colData(sce)[colData(sce)[, "CellType"] %in% c("Ductal", "Acinar"),
-              "CellCat"] <- "Exocrine"
+colData(sce)[colData(sce)[, "cell_type"] %in% c("Ductal", "Acinar"),
+              "cell_category"] <- "Exocrine"
 # Stroma-category (Endothelial, Fibro_Endo)
-colData(sce)[colData(sce)[, "CellType"] %in% c("Endothelial", "Mesenchymal"),
-              "CellCat"] <- "Stroma"
+colData(sce)[colData(sce)[, "cell_type"] %in% c("Endothelial", "Fibro_SM"),
+              "cell_category"] <- "Stroma"
+
 # Other-category (Other)
-colData(sce)[colData(sce)[, "CellType"] %in% c("Other"),
-              "CellCat"] <- "Other"
+colData(sce)[colData(sce)[, "cell_type"] %in% c("Other"),
+              "cell_category"] <- "Other"
 ```
 
 ### Plot cell types on reduced dimensions
 
 ```{r cellcats-dimred}
+spe_sub$Pheno1_scaled <- sce[, colnames(spe_sub)]$Pheno1_scaled
+spe_sub$cell_type <- sce[, colnames(spe_sub)]$cell_type
+
 # Prepare the data
-cur_dat <- makePerCellDF(sce, use_dimred = TRUE) |>
-  mutate(case_id = factor(case_id, levels = metadata(sce)$cases),
-         donor_type = factor(donor_type, levels = metadata(sce)$stages)) |>
+cur_dat <- makePerCellDF(spe_sub, use_dimred = TRUE) |>
   arrange(case_id, donor_type)
 
 # Plot
@@ -508,11 +512,11 @@ cur_dimred <- "UMAP"
 cur_method <- "Pheno1"
 
 dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
-clust_name <- "CellType"
+clust_name <- "cell_type"
 
 p <- plot_dim_red(cur_dat, dimred_name, clust_name,
                   sample = TRUE, size = 1, alpha = 1)
-if (do_print) { print(p)}
+print(p)
 
 fn <- paste0(paste(today, clust_name, cur_dimred,
                   sep = "_"), ".png")
@@ -524,13 +528,13 @@ do.call(ggsave, c(list(fn, p), plotsave_param))
 ```{r cellcats-heatmap}
 cur_assay <- "scaled"
 name_cur_assay <- "scaled"
-clust_name <- "CellType"
+clust_name <- "cell_type"
 
 # Summarize the data
 hm <- summarize_heatmap(sce,
-                    expr_values = name_cur_assay,
-                    cluster_by = clust_name,
-                    channels = channels_clust)
+                        expr_values = name_cur_assay,
+                        cluster_by = clust_name,
+                        channels = channels_clust)
 
 # Display the heatmap
 fn <- paste0(paste(today, clust_name, "Heatmap",
@@ -545,8 +549,8 @@ file = file.path(paths$folder_script, fn))
 ### Number of cells by cell category
 
 ```{r cells-per-category}
-table(colData(sce)[, "CellCat"])
-table(colData(sce)[, "CellType"])
+table(colData(sce)[, "cell_type"])
+table(colData(sce)[, "cell_category"])
 ```
 
 
@@ -557,24 +561,23 @@ table(colData(sce)[, "CellType"])
 Plot consensus cell categories on reduced dimensions
 
 ```{r consensus-dimred}
+spe_sub$cell_category <- sce[, colnames(spe_sub)]$cell_category
+
 ccat <- c("Immune", "Islet", "Exocrine", "Stroma", "Other")
 names(ccat) <- c("Immune", "Islet", "Exocrine", "Stroma", "Other")
 palette_ccat <- c(palettes$colors[1:(length(ccat) - 2)], "grey40", "grey")
 names(palette_ccat) <- ccat
 
-cur_dat <- scuttle::makePerCellDF(sce[, colnames(sce) %in% metadata(sce)$subset],
+cur_dat <- scuttle::makePerCellDF(spe_sub,
                                   use_dimred = TRUE) |>
-  mutate(case_id = factor(case_id, levels = metadata(sce)$cases),
-         donor_type = factor(donor_type, levels = metadata(sce)$stages)) |>
   arrange(case_id, donor_type)
-
 
 dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
 
-p <- plot_dim_red(cur_dat, dimred_name, "CellCat",
+p <- plot_dim_red(cur_dat, dimred_name, "cell_category",
                   sample = TRUE, size = 0.1, alpha = 1,
                   palette = palette_ccat)
-if (do_print) print(p)
+print(p)
 
 fn <- paste0(paste(today, "CellCat", "Consensus", dimred_name,
                     sep = "_"), ".png")
@@ -584,26 +587,21 @@ do.call(ggsave, c(list(fn, p), plotsave_param))
 ## Heatmap
 
 ```{r consensus-heatmap}
-hmlist <- list()
+clust_name <- paste("cell_category", cur_assay, sep = "_")
 
-purrr::map(assay_sel, \(cur_assay) {
-  clust_name <- paste("cell_category", cur_assay, sep = "_")
+# Summarize the data
+hm <- summarize_heatmap(sce,
+                        expr_values = cur_assay,
+                        cluster_by = "cell_category",
+                        channels = channels)
 
-  # Summarize the data
-  hm <- summarize_heatmap(sce,
-                          expr_values = cur_assay,
-                          cluster_by = "cell_category",
-                          channels = channels)
+# Display the heatmap
+fn <- paste0(paste(today, "CellCat", "Consensus", cur_assay,
+                    "Heatmap", sep = "_"), ".html")
 
-  # Display the heatmap
-  fn <- paste0(paste(today, "CellCat", "Consensus", cur_assay,
-                     "Heatmap", sep = "_"), ".html")
-
-  hmlist[[i]] <- heatmaply(
-    heatmaply::normalize(hm), main = clust_name,
-    file = file.path(paths$folder_script, fn))
-})
-htmltools::tagList(setNames(hmlist, NULL))
+heatmaply(
+  heatmaply::normalize(hm), main = clust_name,
+  file = file.path(paths$folder_script, fn))
 ```
 
 
@@ -625,41 +623,40 @@ cor_test_p <- function(x) {
   z
 }
 
-hmlist <- list()
-purrr::map2(assay_sel, names(assay_sel), \(cur_assay, name_cur_assay) {
+name_cur_assay <- "scaled"
+cur_assay <- "scaled"
 
-  # Summarize the data
-  hm <- summarize_heatmap(sce,
-                          expr_values = name_cur_assay,
-                          cluster_by = "cell_category",
-                          channels = channels)
+# Summarize the data
+hm <- summarize_heatmap(sce,
+                        expr_values = name_cur_assay,
+                        cluster_by = "cell_category",
+                        channels = channels)
 
-  # Run the correlation test
-  r <- cor(hm, method = cor_method)
-  p <- cor_test_p(hm)
-  diag(p) <- NA
+# Run the correlation test
+r <- cor(hm, method = cor_method)
+p <- cor_test_p(hm)
+diag(p) <- NA
 
-  # Plot and save the heatmap
-  fn <- paste0(paste(today, "CellCat", "Consensus", "Correlation",
-                     cur_assay, sep = "_"), ".html")
+# Plot and save the heatmap
+fn <- paste0(paste(today, "CellCat", "Consensus", "Correlation",
+                    cur_assay, sep = "_"), ".html")
 
-  hmlist[[i]] <- heatmaply::heatmaply_cor(
-    r, node_type = "scatter",
-    point_size_mat = -log10(p), point_size_name = "-log10(p-value)",
-    label_names = c("x", "y", "Correlation"),
-    main = paste("Cell type -", cur_assay),
-    file = file.path(paths$folder_script, fn))
-})
-htmltools::tagList(setNames(hmlist, NULL))
+heatmaply::heatmaply_cor(
+  r, node_type = "scatter",
+  point_size_mat = -log10(p), point_size_name = "-log10(p-value)",
+  label_names = c("x", "y", "Correlation"),
+  main = paste("Cell type -", cur_assay),
+  file = file.path(paths$folder_script, fn))
 ```
 
 # **Save **
 
 ## Remove temporary columns
 
-```{r remove-cellcat-columns}
-cellcat_cols <- colnames(colData(sce))[grep("CellCat_", colnames(colData(sce)))]
-colData(sce)[, cellcat_cols] <- NULL
+## Save SCE
+
+```{r save-sce}
+fn <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, "sce.rds"))
+saveRDS(sce, fn)
 ```
 
-## Convert to SPE
