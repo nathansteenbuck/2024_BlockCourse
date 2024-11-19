@@ -57,9 +57,7 @@ suppressPackageStartupMessages(c(
   library(pheatmap),
   # library(parallel),
   library(purrr),
-  library(furrr),
-  library(tictoc),
-  library(tidylog)
+  library(furrr)
 ))
 ```
 
@@ -178,9 +176,7 @@ bin_size <- list("Batch1" = 3, "Batch2" = 15,
                  "Batch3" = 4, "Batch4" = 3)
 
 # Pixel binning
-tic()
 spillcomp_bin <- future_map2(spillcomp, bin_size, binAcrossPixels, .options = furrr_options(seed = seed))
-toc()
 
 # Transform pixel counts by arcsinh() with a co-factor of 5
 spillcomp_bin <- purrr::map(spillcomp_bin, \(x) {
@@ -313,7 +309,6 @@ if (!("raw" %in% assayNames(spe))) {
   }
   
   # Apply spillover compensation per batch. This takes considerable time.
-  tic()
   spe_comp <- purrr::map(spe_comp, function(x) {
     rowData(x)$channel_name <- paste0(rowData(x)$metal, "Di")
     spillmat <- metadata(x)$spillover_matrix
@@ -321,7 +316,6 @@ if (!("raw" %in% assayNames(spe))) {
     x <- CATALYST::compCytof(x, spillmat, transform = FALSE, cofactor = 1,
                              isotope_list = isotope_list, overwrite = FALSE)
   }, .progress = TRUE)
-  toc()
 
   # Merge the SPE objects
   spe_comp <- do.call(cbind, spe_comp)

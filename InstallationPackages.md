@@ -67,18 +67,21 @@ if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 ```
 
-```{r}
-BiocManager::install("CATALYST")
-BiocManager::install("SpatialExperiment")
-BiocManager::install("imcRtools")
-BiocManager::install("batchelor")
-```
+Install the Bioconductor packages.
 
 ```{r}
-install.packages("tidyverse")
+bio_pkgs <- c("CATALYST", "SpatialExperiment", "imcRtools", "batchelor", "BiocParallel", "scuttle", "dittoSeq",
+          "cytomapper", "cytoviewer", "dittoSeq", "EBImage", "pheatmap", "scater")
+BiocManager::install(bio_pkgs)
 ```
 
-FIXME: ADD other packages here.
+Install packages from the CRAN repository.
+
+```{r}
+install.packages("vroom", "tidyverse", "RColorBrewer", "furrr", "viridis","RSpectra", "data.table", "data.table", "patchwork", "ggridges",  "htmltools", "ggrepel", "uwot", "mclust")
+```
+
+RPhenoannoy can installed with: `devtools::install_github("stuchly/Rphenoannoy@8b81e2e7fb0599f45070e2cba1b28ac219b7c472")`
 
 ## Install R-Studio
 

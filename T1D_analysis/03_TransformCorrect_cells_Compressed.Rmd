@@ -42,7 +42,6 @@ Batch correction can correct potential technical variation between samples befor
 Here, [fastMNN](https://marionilab.github.io/FurtherMNN2018/theory/description.html) is used to correct for batch effects.
 
 
-
 # **Settings**  
 
 ## Load packages
@@ -53,11 +52,8 @@ suppressPackageStartupMessages(c(
   library(dplyr),
   library(batchelor),
   library(BiocParallel),
-  library(harmony),
-  library(tictoc),
   library(ggplot2),
-  library(scater),
-  library(tictoc)
+  library(scater)
 ))
 ```
 

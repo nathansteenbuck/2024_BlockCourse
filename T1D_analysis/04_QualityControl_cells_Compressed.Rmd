@@ -59,8 +59,7 @@ suppressPackageStartupMessages(c(
   library(dplyr),
   library(SpatialExperiment),
   library(parallel),
-  library(furrr),
-  library(tictoc)
+  library(furrr)
 ))
 ```
 
@@ -321,120 +320,46 @@ For the different transformations, check the distribution of each marker intensi
 -> That is, compare densities between donors (and stages) for each channel.
 
 ```{r density-plots, message=FALSE, fig.height=10, fig.width=15}
-purrr::map(assay_sel, \(cur_assay) {
-  # Create tibble with image number, cell number, case and intensity values.
-  cur_dat <- dplyr::bind_cols(
-    image_numer = colData(spe_sub)$image_number,
-    cell_number = colData(spe_sub)$cell_number,
-    case_id = colData(spe_sub)$case_id,
-    t(assay(spe_sub, cur_assay)))
-  
-  # Pivot longer into channel and intensity columns
-  cur_dat <- cur_dat |>
-    tidyr::pivot_longer(cols = -c(image_numer, cell_number, case_id), 
-                        names_to = "channel", values_to = cur_assay)  |> 
-    dplyr::filter(channel %in% channels)  |> 
-    dplyr::arrange(case_id)
-  
-  # Plot Intensity distribution for all channels and donors.
-  p <- cur_dat |> 
-    ggplot(aes(x = get(cur_assay), y = as.factor(case_id))) +
-    geom_density_ridges(aes(fill = as.factor(case_id), color = "black"),
-                        alpha = 0.5) +
-    facet_wrap(~channel) +
-    scale_fill_manual(values = palettes$casestages) +
-    scale_color_manual(values = palettes$stages) +
-    ggtitle(paste("ChannelsperDonor", "-", cur_assay)) +
-    guides(fill = FALSE) +
-    labs(x = cur_assay, y = "Case", color = "T1D stage") +
-    mytheme$standard() +
-    theme(axis.text.y = element_text(size = 3))
-  p  
-  # Save.
-  fn <- paste0(paste(today, "DensityPlots", "ChannelsperDonor",
-                     cur_assay, sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, p), plotsave_param_large))
-})
+cur_assay <- "exprs"
+
+# Create tibble with image number, cell number, case and intensity values.
+cur_dat <- dplyr::bind_cols(
+  image_numer = colData(spe_sub)$image_number,
+  cell_number = colData(spe_sub)$cell_number,
+  case_id = colData(spe_sub)$case_id,
+  t(assay(spe_sub, cur_assay)))
+
+# Pivot longer into channel and intensity columns
+cur_dat <- cur_dat |>
+  tidyr::pivot_longer(cols = -c(image_numer, cell_number, case_id), 
+                      names_to = "channel", values_to = cur_assay)  |> 
+  dplyr::filter(channel %in% channels)  |> 
+  dplyr::arrange(case_id)
+
+# Plot Intensity distribution for all channels and donors.
+p <- cur_dat |> 
+  ggplot(aes(x = get(cur_assay), y = as.factor(case_id))) +
+  geom_density_ridges(aes(fill = as.factor(case_id), color = "black"),
+                      alpha = 0.5) +
+  facet_wrap(~channel) +
+  scale_fill_manual(values = palettes$casestages) +
+  scale_color_manual(values = palettes$stages) +
+  ggtitle(paste("ChannelsperDonor", "-", cur_assay)) +
+  guides(fill = FALSE) +
+  labs(x = cur_assay, y = "Case", color = "T1D stage") +
+  mytheme$standard() +
+  theme(axis.text.y = element_text(size = 3))
+p  
+# Save.
+fn <- paste0(paste(today, "DensityPlots", "ChannelsperDonor",
+                    cur_assay, sep = "_"), ".png")
+do.call(ggsave, c(list(fn, p), plotsave_param_large))
 ```
 
-
-## 90th percentile
-
-Calculate the 90th percentile intensity in each channel for all donors.
-
-```{r 90-percentile, fig.height=10, fig.width=15}
-purrr::map(.x = assay_sel, \(cur_assay) {
-  cur_dat <- dplyr::bind_cols(
-    case_id = colData(spe_sub)$case_id,
-    t(assay(spe_sub, cur_assay))
-  )
-
-  # Calculate 90th percentile of each channel (column-wise) and each case
-  cur_dat <- cur_dat |> 
-    group_by(case_id) |>
-    summarise(across(all_of(channels), \(x) quantile(x, probs = 0.9)))
-
-  cur_dat <- cur_dat |> 
-    tidyr::pivot_longer(cols = -case_id, names_to = "channel", values_to = "perc")
-  
-  # Plot percentiles
-  p <- cur_dat |>
-    ggplot(aes(x = as.factor(case_id), y = perc, fill = as.factor(case_id))) +
-    geom_bar(stat = "identity") +
-    scale_fill_manual(values = palettes$casestages) +
-    facet_wrap(~channel, scales = "free") +
-    labs(x = "Cases", y = "Counts 90th percentile", fill = "Cases") +
-    mytheme$standard() +
-    theme(
-      legend.position = "none",
-      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 3)
-    )
-
-  fn <- paste0(paste(today, "90thPercentiles", cur_assay, sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, p), plotsave_param_large))
-})
-```
-
-Q: Do you observe differences in the 90th percentile between cases and stages?
-How can we interpret them?
+-> Q: Do you observe differences in the density plots between donors and stages?
+-> How can we interpret them?
 
 ## Heatmaps
-
-### Interactive heatmaps
-
-Interactive heatmaps of feature expression are generated using the [heatmaply package](https://github.com/talgalili/heatmaply).
-Aggregated both by stage and case.
-
-```{r heatmap-case-stage}
-hmlist <- list()
-hmlist <- replicate(n = length(plot_variables2), expr = list())
-names(hmlist) <- plot_variables2
-
-purrr::map2(assay_sel, seq_along(assay_sel), \(cur_assay, idx_assay) {
-  purrr::map2(plot_variables2, seq_along(plot_variables2), \(plot_x, idx_plots) {
-    # Prepare the data. summarize_heatmap defined in helpers.R
-    hm <- summarize_heatmap(spe_sub, cur_assay,
-                            names(plot_variables2)[idx_plots], channels, "mean")
-    # Row-side colors
-    cur_var <- metadata(spe)[[plot_x]]
-    rowsidecol <- cur_var[order(match(cur_var, rownames(hm)))]
-    rowsidepal <- palettes[[plot_x]]
-    rowsidepal <- rowsidepal[names(rowsidepal) %in% rownames(hm)]
-    rowsidepal <- rowsidepal[order(match(names(rowsidepal), rownames(hm)))]
-    # Define file name
-    fn <- paste0(paste(today, "Heatmap", plot_x, cur_assay, sep = "_"), ".html")
-
-    # Plot heatmap
-    hmlist[[idx_plots]][[idx_assay]] <- heatmaply::heatmaply(
-      heatmaply::normalize(hm),
-      RowSideColors = rowsidepal, row_side_palette = rowsidepal,
-      seriate = "OLO",
-      main = paste(plot_x, cur_assay, sep = " - "),
-      file = file.path(paths$folder_script, fn))
-  })
-})
-htmltools::tagList(setNames(hmlist, NULL))
-```
 
 ### Visualize mean expression levels
 
@@ -475,21 +400,21 @@ assay_sel_mean <- c("counts", "exprs", "scaled")
 Heatmaps of marker intensities without scaling
 
 ```{r dittoheatmap-not-scaled}
-purrr::walk(assay_sel_mean, \(cur_assay) {
-  h <- dittoHeatmap(sce_mean, assay = cur_assay,
-                    annot.by = c("case_id", "donor_type"),
-                    order.by = match(cases, sce_mean$case_id),
-                    scale = "none", heatmap.colors = viridis(100),
-                    cluster_cols = FALSE,
-                    main = paste("Heatmap", "NotScaled", cur_assay,
-                                 sep = " - "),
-                    annotation_colors = list(case_id = palettes$cases,
-                                             donor_type = palettes$stages),
-                    genes = channels)
-  fn <- paste0(paste(today, "HeatmapDitto", "NotScaled",
+cur_assay <- "exprs"
+h <- dittoHeatmap(sce_mean, assay = cur_assay,
+                  annot.by = c("case_id", "donor_type"),
+                  order.by = match(cases, sce_mean$case_id),
+                  scale = "none", heatmap.colors = viridis(100),
+                  cluster_cols = FALSE,
+                  main = paste("Heatmap", "NotScaled", cur_assay,
+                                sep = " - "),
+                  annotation_colors = list(case_id = palettes$cases,
+                                            donor_type = palettes$stages),
+                  genes = channels)
+print(h)
+fn <- paste0(paste(today, "HeatmapDitto", "NotScaled",
                      cur_assay, sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, h), plotsave_param))
-})
+do.call(ggsave, c(list(fn, h), plotsave_param))
 ```
 
 # Images
@@ -585,7 +510,7 @@ if (interactive()) {
 ```
 
 Q: What can you observe in the images?
-Q: Do you see the previously identified differences in marker expression between the donors?  
+
 
 ## Image-level quality control
 
@@ -738,10 +663,26 @@ print(plot_variables)
 channels_cat <- c("SYP", "AMY", "KRT19", 
                   "CD45", "MPO", "CD68", 
                   "SMA", "CD31")
+```
 
+```{r}
+if (!("subset" %in% names(metadata(spe)))) {
+  # Cells per case
+  nb_cells <- 7500
+  
+  # Subset the SPE object (nb_cells per case)
+  cell_subset <- tibble(rn = rownames(colData(spe)),
+                        case_id = colData(spe)$case_id) |> 
+    group_by(case_id) |>
+    sample_n(nb_cells) |> 
+    pull(rn)
+  
+  # Keep the subset cell ids in SPE metadata
+  metadata(spe)[["subset"]] <- sort(as.vector(cell_subset))
+}
 # Subset the SPE object
-spe_sub <- spe[channels_dimred, ]
-spe_cat <- spe[channels_cat, ]
+spe_sub <- spe[channels_dimred, metadata(spe)[["subset"]]]
+spe_cat <- spe[channels_cat, metadata(spe)[["subset"]]]
 ```
 
 
@@ -757,8 +698,6 @@ see publication.
 
 ```{r run-UMAP}
 # Save as variable and write assays to NULL. Reduces memory overhead for parallelization. 
-colnames_spe <- colnames(spe)
-
 # Add UMAPs to SPE object
 results <- purrr::map(assay_sel, \(cur_assay) {
   dimred_name <- paste("UMAP", cur_assay, sep = "_")
@@ -784,16 +723,13 @@ results <- purrr::map(assay_sel, \(cur_assay) {
 dimred_name1 <- paste("UMAP", assay_sel[1], sep = "_")
 dimred_name2 <- paste("UMAP", assay_sel[2], sep = "_")
 
-reducedDim(spe, dimred_name1) <- results[[1]]
-reducedDim(spe, dimred_name2) <- results[[2]]
+reducedDim(spe_sub, dimred_name1) <- results[[1]]
+reducedDim(spe_sub, dimred_name2) <- results[[2]]
 ```
 
 ## Run UMAP for Categories.
 
 ```{r run-UMAP-cat}
-# Save as variable and write assays to NULL. Reduces memory overhead for parallelization. 
-colnames_spe <- colnames(spe)
-
 # Add UMAPs to SPE object
 results <- purrr::map(assay_sel, \(cur_assay) {
   dimred_name <- paste("UMAP", cur_assay, sep = "_")
@@ -819,22 +755,9 @@ results <- purrr::map(assay_sel, \(cur_assay) {
 dimred_name1 <- paste("UMAP", assay_sel[1], "cat", sep = "_")
 dimred_name2 <- paste("UMAP", assay_sel[2], "cat", sep = "_")
 
-reducedDim(spe, dimred_name1) <- results[[1]]
-reducedDim(spe, dimred_name2) <- results[[2]]
+reducedDim(spe_cat, dimred_name1) <- results[[1]]
+reducedDim(spe_cat, dimred_name2) <- results[[2]]
 ```
-
-
-## Save the updated SPE object
-
-Contains the new reduced dimensions
-
-```{r save-spe1}
-fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
-print(reducedDimNames(spe))
-print(assayNames(spe))
-saveRDS(spe, fn_spe)
-```
-
 
 ## Plot reduced dimensions
 
@@ -844,74 +767,66 @@ Plot selected variables on reduced dimensions.
 
 ```{r plot-dimred, fig.width=15, fig.height=10}
 # Prepare the data
-cur_dat <- makePerCellDF(spe[, colnames(spe) %in% metadata(spe)$subset]) |>
+cur_dat <- makePerCellDF(spe_sub) |>
   dplyr::mutate(case_id = factor(case_id, levels = cases),
                 donor_type = factor(donor_type, levels = stages)) |>
   dplyr::arrange(case_id, donor_type)
 
+cur_dimred <- "UMAP"
+cur_assay <- "exprs"
 # Plot variables
-purrr::walk(assay_sel, \(cur_assay) {
-  purrr::walk(dimred_sel, \(cur_dimred) {
-    purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
-      dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
-      message(dimred_name)
-      p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
-                        size = 0.5, palette = palettes[[cur_var]])
-      
-      fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
-      do.call(ggsave, c(list(fn, p), plotsave_param))
-    })
-  })
-}, .progress = TRUE)
+purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
+  dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
+  message(dimred_name)
+  p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
+                    size = 0.5, palette = palettes[[cur_var]])
+  
+  fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
+  do.call(ggsave, c(list(fn, p), plotsave_param))
+})
 ```
 
 Questions:
 Do you see differences on the UMAPs?
 If so, what does that mean?
 
+
 ### Plot marker expression
 
 ```{r plot-dimred-channels, fig.height=10, fig.width=15}
 # Subset the SPE object
-spe_sub <- spe[channels, ]
-
+cur_assay <- "exprs"
 # Plot marker expression
-tic("Plot marker expression")
-purrr::walk(assay_sel, \(cur_assay) {
-  purrr::walk(dimred_sel, \(cur_dimred) {
-    dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
+dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
 
-    # Prepare the data
-    if (cur_assay %in% assayNames(spe_sub)) {
-      cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels,
-                                        exprs_values = cur_assay) |>
-                  dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
-                                                    paste0(dimred_name, ".2")))
-    } else {
-      cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels,
-                                        exprs_values = "exprs") |>
-        dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
-                                          paste0(dimred_name, ".2")))
-    }
-    
-    cur_dat <- cur_dat |>
-      tidyr::pivot_longer(cols = all_of(channels),
-                          names_to = "channel",
-                          values_to = cur_assay)
-    
-    # Plot marker expression
-    p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
-                               channels, force_points = TRUE)
+# Prepare the data
+if (cur_assay %in% assayNames(spe_sub)) {
+  cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels_dimred,
+                                    exprs_values = cur_assay) |>
+                dplyr::select(c(all_of(channels_dimred), paste0(dimred_name, ".1"), 
+                                                  paste0(dimred_name, ".2")))
+} else {
+  cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels,
+                                    exprs_values = "exprs") |>
+  dplyr::select(c(all_of(channels_dimred), paste0(dimred_name, ".1"), 
+                                        paste0(dimred_name, ".2")))
+}
 
-    fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
-    do.call(ggsave, c(list(fn, p), plotsave_param_large))
-  })
-}, .progress = TRUE)
-toc()
+cur_dat <- cur_dat |>
+    tidyr::pivot_longer(cols = all_of(channels_dimred),
+                        names_to = "channel",
+                        values_to = cur_assay)
+  
+  # Plot marker expression
+p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
+                              channels_dimred, force_points = TRUE)
+
+fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
+do.call(ggsave, c(list(fn, p), plotsave_param_large))
+
 ```
 
 ## UMAP for Categories
-
 
 ### Plot variables
 
@@ -919,61 +834,48 @@ Plot selected variables on reduced dimensions.
 
 ```{r plot-dimred, fig.width=15, fig.height=10}
 # Prepare the data
-cur_dat <- makePerCellDF(spe_cat[, colnames(spe) %in% metadata(spe)$subset]) |>
+cur_dat <- makePerCellDF(spe_cat) |>
   dplyr::mutate(case_id = factor(case_id, levels = cases),
                 donor_type = factor(donor_type, levels = stages)) |>
   dplyr::arrange(case_id, donor_type)
-cur_dimred <- "UMAP"
+
 # Plot variables
-purrr::walk(assay_sel, \(cur_assay) {
-  purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
-    dimred_name <- paste(cur_dimred, cur_assay, "cat", sep = "_")
-    message(dimred_name)
-    p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
-                      size = 0.5, palette = palettes[[cur_var]])
-    
-    fn <- paste0(paste(today, dimred_name, cur_var, "cat", sep = "_"), ".png")
-    do.call(ggsave, c(list(fn, p), plotsave_param))
-  })
-}, .progress = TRUE)
+cur_assay <- "exprs"
+purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
+  dimred_name <- paste(cur_dimred, cur_assay, "cat", sep = "_")
+  message(dimred_name)
+  p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
+                    size = 0.5, palette = palettes[[cur_var]])
+  
+  fn <- paste0(paste(today, dimred_name, cur_var, "cat", sep = "_"), ".png")
+  do.call(ggsave, c(list(fn, p), plotsave_param))
+})
 ```
 
 ### Plot marker expression
 On reduced set of markers.
 
 ```{r plot-dimred-channels, fig.height=10, fig.width=15}
-spe_cat <- spe[channels_cat, ]
 cur_dimred <- "UMAP"
-cur_assay <- "scaled"
+cur_assay <- "exprs"
 # Plot marker expression
-tic("Plot marker expression")
-purrr::walk(assay_sel, \(cur_assay) {
-  dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
+dimred_name <- paste(cur_dimred, cur_assay, "cat", sep = "_")
 
-  # Prepare the data
-  if (cur_assay %in% assayNames(spe_cat)) {
-    cur_dat <- scuttle::makePerCellDF(spe_cat, features = channels_cat,
-                                      exprs_values = cur_assay) |>
-                dplyr::select(c(all_of(channels_cat), paste0(dimred_name, ".1"), 
-                                                  paste0(dimred_name, ".2")))
-  } else {
-    cur_dat <- scuttle::makePerCellDF(spe_cat, features = channels_cat,
-                                      exprs_values = "exprs") |>
-      dplyr::select(c(all_of(channels_cat), paste0(dimred_name, ".1"), 
-                                        paste0(dimred_name, ".2")))
-  }
-  
-  cur_dat <- cur_dat |>
-    tidyr::pivot_longer(cols = all_of(channels_cat),
-                        names_to = "channel",
-                        values_to = cur_assay)
-  
-  # Plot marker expression
-  p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
-                              channels_cat, force_points = TRUE)
+# Prepare the data
+cur_dat <- scuttle::makePerCellDF(spe_cat, features = channels_cat,
+                                  exprs_values = "exprs") |>
+    dplyr::select(c(all_of(channels_cat), paste0(dimred_name, ".1"), 
+                                      paste0(dimred_name, ".2")))
 
-  fn <- paste0(paste(today, dimred_name, "Channels", "cat", sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, p), plotsave_param_large))
-})
-toc()
+cur_dat <- cur_dat |>
+  tidyr::pivot_longer(cols = all_of(channels_cat),
+                      names_to = "channel",
+                      values_to = cur_assay)
+
+# Plot marker expression
+p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
+                            channels_cat, force_points = TRUE)
+
+fn <- paste0(paste(today, dimred_name, "Channels", "cat", sep = "_"), ".png")
+do.call(ggsave, c(list(fn, p), plotsave_param_large))
 ```
