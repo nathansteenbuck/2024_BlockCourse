@@ -16,15 +16,16 @@ editor_options:
 - Read in both datasets.
 - Compare the cell type attributions between the two datasets per ROI.
 - Visualize the differences.
-- Calculate statistics per linear mixed-effects model.
+- Calculate correlations
 - If time: compare potential beta-cell loss between stages, or increase in T-Cells (CD4+/CD8+)
-- Save the results.
 
 
 ```{r setup, include=FALSE}
 script_name <- "07_CellTypesComparison_cells_Compressed.Rmd"
 
-source(file.path("/", "Users", "nathan", "2024_BlockCourse", "T1D_analysis", "helpers.R"))
+source(file.path("/", "mnt", "central_nas", "projects", 
+                 "type1_diabetes", "nathan", "BlockCourse", "2024_BlockCourse", "T1D_analysis", 
+                "helpers.R"))
 n_cores <- 2
 future::plan(future::multicore(workers = n_cores))
 paths <- getPaths(script_name)
@@ -38,4 +39,97 @@ paths$prev <- paste("06_CellTypes", paths$object_type, paths$panel_type, sep = "
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-#FIXME: write script.
+# **Settings**
+
+## Load packages
+
+```{r packages, results="hide"}
+suppressPackageStartupMessages(c(
+  library(data.table),
+  library(dplyr),
+  library(SpatialExperiment),
+  library(parallel),
+  library(tictoc),
+  library(purrr),
+  library(furrr)
+))
+```
+
+## Paths and settings
+
+```{r settings}
+# Paths
+if (!dir.exists(paths$folder_script)) dir.create(paths$folder_script)
+plotsave_param$path <- paths$folder_script
+plotsave_param_large$path <- paths$folder_script
+
+# Misc settings
+today <- gsub("-", "", Sys.Date())
+```
+
+##  Read in the data
+
+Load the SpatialExperiment (SPE) object saved at the previous step.
+
+```{r load-data}
+fn_spe_compressed <- file.path(paths$folder_out, paste0(paths$object_type, "_", "Compressed.rds"))
+spe_compressed <- readRDS(fn_spe_compressed)
+print(spe_compressed)
+
+compressed_df <- scuttle::makePerCellDF(spe_compressed, use.dimred = FALSE) |> 
+  mutate(method = "Compressed") |> 
+  select(case_id, panel, cell_number, cell_type, cell_category, method, image_id)
+```
+
+```{r load-data2}
+fn_spe_uncompressed <- file.path(paths$folder_out, paste0(paths$object_type, "_", "Uncompressedsce.rds"))
+spe_uncompressed <- readRDS(fn_spe_uncompressed)
+print(spe_uncompressed)
+
+uncompressed_df <- scuttle::makePerCellDF(spe_uncompressed, use.dimred = FALSE) |> 
+  mutate(method = "Uncompressed") |> 
+  select(case_id, panel, cell_number, cell_type, cell_category, method, image_id)
+```
+
+```{r load-data3}
+# Dodged Barplot of Cell Types
+df <- compressed_df  |> 
+  bind_rows(uncompressed_df) |> 
+  mutate(method = factor(method, levels = c("Compressed", "Uncompressed"))) |> 
+  as_tibble()
+
+df |> 
+  ggplot(aes(x = cell_type, fill = method)) +
+  geom_bar(position = "dodge") +
+  mytheme$standard()
+```
+
+```{r}
+df |> 
+  filter(cell_type %in% c("Beta", "T_CD4", "T_CD8", "T_cell")) |> 
+  ggplot(aes(x = case_id, y = cell_number, fill = method)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  mytheme$standard() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~cell_type, scales = "free_y")
+```
+
+
+Visualize as a heatmap.
+```{r correlation}
+# Visualize Cell-Category Correlation per ROI.
+
+
+# Calculate Cell-Type Correlation per ROI.
+df |>
+  filter(cell_type != "Islet_Other") |> 
+  mutate(cell_type = ifelse(cell_type == "Macrophage", "Myeloid", cell_type)) |>
+  mutate(cell_type = ifelse(cell_type %in% c("T_CD4", "T_CD8"), "T_cell", cell_type)) |>
+  mutate(image_id = stringr::str_remove(image_id, "_Compressed")) |> 
+  mutate(image_id = stringr::str_remove(image_id, "_Uncompressed")) |>
+  dplyr::count(method, case_id, cell_type, image_id) |> # Count occurrences
+  tidyr::pivot_wider(names_from = method, values_from = n)
+```
+
+
+

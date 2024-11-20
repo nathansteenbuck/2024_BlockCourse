@@ -82,7 +82,7 @@ spe <- readRDS(fn_spe)
 print(spe)
 ```
 
-```{r convert-to-sce}
+```{r remove-6399}
 # Remove 6399.
 spe <- spe[, colData(spe)$case_id != "6399"]
 
@@ -104,8 +104,7 @@ suppressPackageStartupMessages(c(
   library(scran),
   library(Rphenoannoy),
   library(patchwork),
-  library(BiocParallel),
-  library(tictoc)
+  library(BiocParallel)
 ))
 ```
 
@@ -319,6 +318,20 @@ heatmaply(
 ```
 
 
+PUt these into the following compartments:
+Islet, Immune, Exocrine, Stroma, Other.
+
+
+Exocrine: 25, ...
+Islet: 20, ...
+
+clust_other <- c(5, 7, 17, 22)
+clust_islet <- c(18, 19, 20, 21)
+clust_immune <- c(6, 8, 9, 14, 16)
+clust_stroma <- c(11, 15)
+clust_exocrine <- c(1, 25, 24, 23, 8, 4, 2, 12, 13, 3, 10)
+
+
 ## Visualize clusters with cytomapper and cytoviewer
 
 Here, we use the `cytoviewer` package to visualize the clusters on the images.
@@ -329,7 +342,7 @@ Additional information we can use is their spatial localization of cell types, i
 ### Select cluster(s) and assay to show
 
 ```{r viz-clust-select}
-viz_clust <- c(20) # Select cluster(s) to visualize.
+viz_clust <- c(3, 10, 22, 6) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "scaled"
 ```
@@ -424,27 +437,11 @@ clust_name <- paste(clust_methods, clust_assay, "cat", sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-
-# Exocrine: 11, 4, 23, 19, 2, 12, 3, 
-# Islet: 26, 25, 24
-# Mixed: 23, 27
-# Immune: 14, 21, 28, 18
-# Stroma: 22
-# Other: 
-# Unclear: 24
-
-# Stroma: 23
-# Immune: 15, 8, 14, 12
-# Islet: 20, 18, 21, 17, 16
-# Exocrine: 25, 16, 1, 19, 9, 3, 6, 10, 4,
-# Exocrine 2: 7, 2, 11, 24, 22, 13, 
-# Other: 17
-
-clust_islet <- c(20, 18, 21, 17, 16)
-clust_immune <- c(15, 8, 14, 12)
-clust_exocrine <- c(25, 1, 19, 9, 3, 6, 10, 4,7, 2, 11, 24, 22, 13)
-clust_stroma <- c(23)
-clust_other <- c(5)
+clust_other <- c(5, 7, 17, 22)
+clust_islet <- c(18:21)
+clust_immune <- c(6, 8, 9, 14, 16)
+clust_stroma <- c(11, 15)
+clust_exocrine <- c(1:4, 10, 12, 13, 23:25)
 
 all_clust <- sort(c(clust_islet, clust_immune, clust_exocrine, clust_stroma,clust_other))  
 
@@ -459,19 +456,18 @@ if ((!length(unique(all_clust)) ==
 colData(sce_cat)[colData(sce_cat)[, clust_name] %in% clust_islet,
                 "CellCat"] <- "Islet"
 colData(sce_cat)[colData(sce_cat)[, clust_name] %in% clust_immune,
-              "CellCat"] <- "Immune"
+                "CellCat"] <- "Immune"
 colData(sce_cat)[colData(sce_cat)[, clust_name] %in% clust_exocrine,
-             "CellCat"] <- "Exocrine"
+                "CellCat"] <- "Exocrine"
 colData(sce_cat)[colData(sce_cat)[, clust_name] %in% clust_stroma,
-              "CellCat"] <- "Stroma"
+                "CellCat"] <- "Stroma"
 colData(sce_cat)[colData(sce_cat)[, clust_name] %in% clust_other,
-               "CellCat"]<- "Other"
+                "CellCat"]<- "Other"
 ```
 
 ### Plot cell types on reduced dimensions
 
 ```{r cellcats-dimred}
-
 sce_sub_cat$Pheno1_scaled_cat <- sce_cat[, metadata(spe)[["subset"]]]$Pheno1_scaled_cat
 sce_sub_cat$CellCat <- sce_cat[, metadata(spe)[["subset"]]]$CellCat
 
@@ -525,81 +521,6 @@ file = file.path(paths$folder_script, fn))
 table(colData(sce_cat)[, "CellCat"])
 ```
 
-
-# **Plot cell categories**
-
-## Reduced dimensions
-
-Plot consensus cell categories on reduced dimensions
-
-```{r consensus-dimred}
-ccat <- c("Immune", "Islet", "Exocrine", "Stroma", "Other")
-names(ccat) <- c("Immune", "Islet", "Exocrine", "Stroma", "Other")
-palette_ccat <- c(palettes$colors[1:(length(ccat) - 2)], "grey40", "grey")
-names(palette_ccat) <- ccat
-
-cur_dat <- scuttle::makePerCellDF(sce_cat,
-                                  use_dimred = TRUE) |>
-  mutate(case_id = factor(case_id, levels = metadata(sce_cat)$cases),
-         donor_type = factor(donor_type, levels = metadata(sce_cat)$stages)) |>
-  arrange(case_id, donor_type)
-
-
-dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
-
-p <- plot_dim_red(cur_dat, dimred_name, "CellCat",
-                  sample = TRUE, size = 0.1, alpha = 1,
-                  palette = palette_ccat)
-if (do_print) print(p)
-
-fn <- paste0(paste(today, "CellCat", "Consensus", dimred_name,
-                    sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p), plotsave_param))
-```
-
-
-## Correlation between channels
-
-```{r cell-category-correlation}
-# Define the correlation method
-cor_method <- "pearson"
-
-# Function to calculate p values
-cor_test_p <- function(x) {
-  FUN <- function(x, y) cor.test(x, y, method = cor_method)[["p.value"]]
-  z <- outer(
-    colnames(x),
-    colnames(x),
-    Vectorize(function(i, j) FUN(x[, i], x[, j]))
-  )
-  dimnames(z) <- list(colnames(x), colnames(x))
-  z
-}
-i <- 0
-hmlist <- list()
-# Summarize the data
-hm <- summarize_heatmap(sce_cat,
-                        expr_values = name_cur_assay,
-                        cluster_by = "CellCat",
-                        channels = channels_cat)
-
-# Run the correlation test
-r <- cor(hm, method = cor_method)
-p <- cor_test_p(hm)
-diag(p) <- NA
-
-# Plot and save the heatmap
-fn <- paste0(paste(today, "CellCat", "Consensus", "Correlation",
-                    cur_assay, sep = "_"), ".html")
-
-heatmaply::heatmaply_cor(
-  r, node_type = "scatter",
-  point_size_mat = -log10(p), point_size_name = "-log10(p-value)",
-  label_names = c("x", "y", "Correlation"),
-  main = paste("Cell type -", cur_assay),
-  file = file.path(paths$folder_script, fn))
-```
-
 # **Save **
 
 ```{r spe-transfer-categories}
@@ -608,7 +529,7 @@ spe$cell_category <- colData(sce_cat)$CellCat
 table(spe$cell_category)
 ```
 
-```{r spe-transfer-categories}
+```{r spe-transfer-categories2}
 fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 print(spe)
 saveRDS(spe, fn_spe)

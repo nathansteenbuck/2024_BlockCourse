@@ -20,7 +20,6 @@ paths <- getPaths(script_name)
 knitr::opts_knit$set(root_dir = paths$cluster_home)
 do_print <- TRUE
 
-
 # Misc. Settings.
 seed <- 123456
 set.seed(seed)
@@ -37,7 +36,7 @@ This script loads cell-level data obtained after running the Pre-processing pipe
 All cell-level data are stored in a [SpatialExperiment (SPE)](https://bioconductor.org/packages/release/bioc/html/SpatialExperiment.html)
 object that will be used by downstream analysis scripts.  
 
-This script can be from the 
+This script can be from the command line with:
 Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/01_ImportData_cells_Compressed.Rmd')"
 
 ## Key variables

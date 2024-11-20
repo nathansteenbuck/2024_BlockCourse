@@ -1076,7 +1076,7 @@ colData(sce_immune_3)[colData(sce_immune_3)[, clust_name] %in% clust_B,
 colData(sce_immune_3)[colData(sce_immune_3)[, clust_name] %in% clust_neutrophil,
                    "cell_type"] <- "Neutrophil"
 colData(sce_immune_3)[colData(sce_immune_3)[, clust_name] %in% clust_macrophage,
-                   "cell_type"] <- "Macrophage"
+                   "cell_type"] <- "Myeloid"
 colData(sce_immune_3)[colData(sce_immune_3)[, clust_name] %in% clust_other,
                     "cell_type"] <- "Other" 
 ```
@@ -1287,7 +1287,7 @@ sce
 
 ### Save SCE
 ```{r save-sce}
-fn_spe <- file.path(paths$folder_script, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
+fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 message(assayNames(sce))
 message(reducedDimNames(sce))
 saveRDS(sce, fn_spe)

@@ -1,5 +1,5 @@
 ---
-title: "04_QualityControl_cells_Uncompressed"
+title: "04_QualityControl_cells_Compressed"
 author: "Nathan Steenbuck"
 date: "Created: 04 November, 2024; Compiled: `r format(Sys.time(), '%d %b, %Y')`"
 output: workflowr::wflow_html
@@ -34,8 +34,7 @@ Perform quality controls on cell-level data.
   
 **Diagnostic plots**  
 - Number of cells and images per condition  
-- Density plots  
-- 90th percentile per channel
+- Density plots
 - Heatmaps   
 
 **Dimensionality reduction**  
@@ -345,7 +344,7 @@ p <- cur_dat |>
   guides(fill = FALSE) +
   labs(x = cur_assay, y = "Case", color = "T1D stage") +
   mytheme$standard() +
-  theme(axis.text.y = element_text(size = 3))
+  theme(axis.text.y = element_text(size = 8))
 p  
 # Save.
 fn <- paste0(paste(today, "DensityPlots", "ChannelsperDonor",
@@ -560,7 +559,7 @@ p <- cur_snr %>%
     mytheme$standard()+  
     ylab("Signal-to-noise ratio [log2]") +
     xlab("Signal intensity [log2]")
-
+print(p)
 fn <- paste0(paste(today, "SNRvsSignalIntensity", sep = "_"), ".png")
 do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
@@ -662,7 +661,8 @@ channels_cat <- c("SYP", "AMY", "KRT19",
                   "SMA", "CD31")
 ```
 
-```{r}
+```{r subset-spe2}
+set.seed(222)
 if (!("subset" %in% names(metadata(spe)))) {
   # Cells per case
   nb_cells <- 7500
@@ -777,7 +777,7 @@ purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
   message(dimred_name)
   p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
                     size = 0.5, palette = palettes[[cur_var]])
-  
+  print(p)
   fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
   do.call(ggsave, c(list(fn, p), plotsave_param))
 })
@@ -802,11 +802,6 @@ if (cur_assay %in% assayNames(spe_sub)) {
                                     exprs_values = cur_assay) |>
                 dplyr::select(c(all_of(channels_dimred), paste0(dimred_name, ".1"), 
                                                   paste0(dimred_name, ".2")))
-} else {
-  cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels,
-                                    exprs_values = "exprs") |>
-  dplyr::select(c(all_of(channels_dimred), paste0(dimred_name, ".1"), 
-                                        paste0(dimred_name, ".2")))
 }
 
 cur_dat <- cur_dat |>
@@ -817,7 +812,7 @@ cur_dat <- cur_dat |>
   # Plot marker expression
 p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
                               channels_dimred, force_points = TRUE)
-
+print(p)
 fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
 do.call(ggsave, c(list(fn, p), plotsave_param_large))
 

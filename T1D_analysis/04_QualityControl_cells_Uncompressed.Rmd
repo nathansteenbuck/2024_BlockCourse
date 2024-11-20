@@ -1,7 +1,7 @@
 ---
 title: "04_QualityControl_cells_Uncompressed"
-author: "Nathan Steenbuck, Nicolas Damond"
-date: "Created: 23 May, 2022; Compiled: `r format(Sys.time(), '%d %b, %Y')`"
+author: "Nathan Steenbuck"
+date: "Created: 23 Oct, 2024; Compiled: `r format(Sys.time(), '%d %b, %Y')`"
 output: workflowr::wflow_html
 editor_options:
   chunk_output_type: inline
