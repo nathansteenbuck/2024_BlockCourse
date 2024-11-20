@@ -33,7 +33,7 @@ knitr::opts_chunk$set(echo = TRUE)
 In the following scripts, cell types are attributed to all cells in the dataset
 in an iterative way:
 
-- `05_CellCategories_cells_Uncompressed` (this script): Attribution of cell types from the compressed dataset.
+- `05_CellCategories_cells_Uncompressed` (this script): Attribution of cell types from the uncompressed dataset.
 
 This is performed by performing PhenoGraph clustering using the Rphenoannoy package.
 

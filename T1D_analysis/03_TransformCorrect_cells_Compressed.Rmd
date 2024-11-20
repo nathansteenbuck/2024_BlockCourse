@@ -37,11 +37,6 @@ Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/03_TransformCorrect
 **1. Counts transformations**  
 IMC data can be transformed to achieve more symmetric intensity distributions with more similar ranges across markers.  
 
-**2. Batch correction**
-Batch correction can correct potential technical variation between samples before applying clustering algorithms. 
-Here, [fastMNN](https://marionilab.github.io/FurtherMNN2018/theory/description.html) is used to correct for batch effects.
-
-
 # **Settings**  
 
 ## Load packages

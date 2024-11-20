@@ -39,7 +39,7 @@ in an iterative way:
 In both scripts this is performed by performing PhenoGraph clustering using the Rphenoannoy package.
 
 The resulting cell categories, which are used in downstream analyses are stored
-as `colData(spe)$cell_category`.
+as `colData(spe)$cell_category`, and the cell types are stored as `colData(spe)$cell_type`.
 
 
 # **Settings**

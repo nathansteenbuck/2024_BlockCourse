@@ -36,7 +36,7 @@ in an iterative way:
 - `05_CellCategories_cells_Compressed` (this script): 
   - Attribution of cell categories from the compressed dataset
 - `06_CellCategories_cells_Compressed`:
-  - Attribution of cell types from the uncompressed dataset
+  - Attribution of cell types.
 
 This is performed by performing PhenoGraph clustering using the Rphenoannoy package.
 

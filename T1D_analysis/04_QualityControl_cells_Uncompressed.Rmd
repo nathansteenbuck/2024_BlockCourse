@@ -44,9 +44,7 @@ Perform quality controls on cell-level data.
 - Plot marker abundances on reduced dimensions.  
 
 **Image visualization**  
-- Display images with `cytoviewer` for visual quality check.  
-- Display images before/after spillover-compensation.  
-
+- Display images with `cytoviewer` for visual quality check.
 
 
 # **Settings**  

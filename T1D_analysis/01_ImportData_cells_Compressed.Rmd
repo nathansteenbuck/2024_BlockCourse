@@ -56,18 +56,6 @@ cause issues when splitting and re-merging.
 - `case_id`: patient id.  
 - `donor_type`: patient type 1 diabetes stage.  
 
- Not included giving that we did not perform Islet Segmentation:
-- `islet_number`: corresponds to the label of the islet in the islet mask. 
-- `islet_id`:  unique cell id (sample id + islet number).  
-- `distance_to_islet`: distance from the considered cell to the border of the 
-closet islet.  
-- `parent_islet`: islet in which the considered cell is located (0 if the cell
-is not located in any islet).  
-- `closest_islet`: closest islet to the considered cell (identical to 
-`parent_islet` if the cell is located within an islet).  
-Also note that cell positions on images are stored in `spatialCoords(spe)`. 
-
-
 **Row data**  
 The data frame can be accessed with `rowData(spe)`.  
 - `name`: name of the antibody target.  
