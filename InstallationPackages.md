@@ -71,14 +71,14 @@ Install the Bioconductor packages.
 
 ```{r}
 bio_pkgs <- c("CATALYST", "SpatialExperiment", "imcRtools", "batchelor", "BiocParallel", "scuttle", "dittoSeq",
-          "cytomapper", "cytoviewer", "dittoSeq", "EBImage", "pheatmap", "scater")
+              "cytomapper", "cytoviewer", "dittoSeq", "EBImage", "pheatmap", "scater", "scran")
 BiocManager::install(bio_pkgs)
 ```
 
 Install packages from the CRAN repository.
 
 ```{r}
-install.packages("vroom", "tidyverse", "RColorBrewer", "furrr", "viridis","RSpectra", "data.table", "data.table", "patchwork", "ggridges",  "htmltools", "ggrepel", "uwot", "mclust")
+install.packages("vroom", "tidyverse", "RColorBrewer", "furrr", "viridis", "RSpectra", "data.table", "data.table", "patchwork", "ggridges",  "htmltools", "ggrepel", "uwot", "mclust", "heatmaply")
 ```
 
 RPhenoannoy can installed with: `devtools::install_github("stuchly/Rphenoannoy@8b81e2e7fb0599f45070e2cba1b28ac219b7c472")`

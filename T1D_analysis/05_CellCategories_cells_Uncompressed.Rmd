@@ -40,7 +40,7 @@ This is performed by performing PhenoGraph clustering using the Rphenoannoy pack
 For cell type annotation we perform unsupervised clustering, and then relate the lineage marker expression of clusters to cell types.
 
 The resulting cell categories, which are used in downstream analyses are stored
-as `colData(spe)$cell_category`.
+as `colData(spe)$cell_type`.
 
 # **Settings**
 
@@ -256,6 +256,7 @@ reducedDim(spe_sub, dimred_name) <- cur_umap
 
 ```{r dimred-clusters}
 cur_method <- "Pheno1"
+cur_dimred <- "UMAP"
 cur_dat <- makePerCellDF(spe_sub, use_dimred = TRUE) |>
   dplyr::arrange(case_id, donor_type)  |> 
   tibble::as_tibble()
@@ -279,11 +280,12 @@ name_cur_assay <- "scaled"
 clust_name <- paste(cur_method, cur_assay, sep = "_")
 message(clust_name)
 
+channels_clust2 <- channels_clust[!channels_clust %in% c("Rb", "FOXP3", "PTPRN", "CD20")]
 # Summarize the data
 hm <- summarize_heatmap(sce,
                         expr_values = name_cur_assay,
                         cluster_by = clust_name,
-                        channels = channels_clust)
+                        channels = channels_clust2)
 
 # Display the heatmap
 fn <- paste0(paste(today, "Clusters", clust_name, "Heatmap",
@@ -297,7 +299,6 @@ clust_freq <- table(colData(sce)[[clust_name]])
 clust_freq
 ```
 
-
 ## Visualize clusters with cytomapper and cytoviewer
 
 Here, we use the `cytoviewer` package to visualize the clusters on the images.
@@ -308,7 +309,7 @@ Additional information we can use is their spatial localization of cell types, i
 ### Select cluster(s) and assay to show
 
 ```{r viz-clust-select}
-viz_clust <- c(2, 4) # Select cluster(s) to visualize.
+viz_clust <- c(4, 5, 14) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "scaled"
 ```
@@ -406,24 +407,43 @@ if (length(clust_assay) != 1)
 clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
-# Define which clusters correspond to which cell types
-clust_alpha <- c(23, 15)
-clust_beta  <- c(19)
+# Islet:
+clust_beta <- c(20, 24) # 24
+clust_alpha <- c(23, 15, 18)
 clust_delta <- c(17)
 clust_gamma <- c(22)
-clust_islet_other <- c(24)
+clust_islet_other <- c()
 
-# Immune cells.
+# Immune:
 clust_t <- c(10)
-clust_myeloid <- c(6) # CD68
-clust_neutrophil <- c(7) # MPO?
+clust_neutrophil <- c(7)
+clust_myeloid <- c(6)
 
 # Exocrine Cells.
-clust_ductal <- c(16, 20)
-clust_acinar <- c(3, 5, 12, 4, 14, 11, 2, 8)
-clust_endothelial <- c(1) #CD31
-clust_mesenchymal <- c(13)
-clust_other <- c(9, 18, 21) # 
+clust_endothelial <- c(1)
+clust_ductal <- c(4, 16, 21)
+clust_mesenchymal <- c()
+clust_other <- c(9, 12, 13, 14, 19)
+clust_acinar <- c(2,3, 5, 8, 11)
+
+# Define which clusters correspond to which cell types
+#clust_alpha <- c(23, 15)
+#clust_beta  <- c(19)
+#clust_delta <- c(17)
+#clust_gamma <- c(22)
+#clust_islet_other <- c(24)
+
+# Immune cells.
+#clust_t <- c(10)
+#clust_myeloid <- c(6) # CD68
+#clust_neutrophil <- c(7) # MPO?
+
+# Exocrine Cells.
+#clust_ductal <- c(16, 20)
+#clust_acinar <- c(3, 5, 12, 4, 14, 11, 2, 8)
+#clust_endothelial <- c(1) #CD31
+#clust_mesenchymal <- c(13)
+#clust_other <- c(9, 18, 21) # 
 
 all_clust <- sort(c(clust_alpha, clust_beta, clust_delta, clust_gamma,
                     clust_t, clust_myeloid, clust_neutrophil,
@@ -523,9 +543,12 @@ fn <- paste0(paste(today, clust_name, cur_dimred,
 do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
 
-### Cell categories heatmap
+### Cell Types heatmap
 
 ```{r cellcats-heatmap}
+channels_clust2 <- channels_clust[!channels_clust %in% 
+                    c("Rb", "FOXP3", "CD45RA", "PTPRN", "CD20")]
+
 cur_assay <- "scaled"
 name_cur_assay <- "scaled"
 clust_name <- "cell_type"
@@ -534,17 +557,23 @@ clust_name <- "cell_type"
 hm <- summarize_heatmap(sce,
                         expr_values = name_cur_assay,
                         cluster_by = clust_name,
-                        channels = channels_clust)
+                        channels = channels_clust2)
 
 # Display the heatmap
 fn <- paste0(paste(today, clust_name, "Heatmap",
                 sep = "_"), ".html")
 
+set.seed(222)
 heatmaply(
 heatmaply::normalize(hm), main = clust_name,
 file = file.path(paths$folder_script, fn))
 ```
 
+
+- CD3 signal
+- Mesenchymal cells (SMA)
+
+- FoxP3, CD45RA signal Delta
 
 ### Number of cells by cell category
 
@@ -601,51 +630,6 @@ fn <- paste0(paste(today, "CellCat", "Consensus", cur_assay,
 
 heatmaply(
   heatmaply::normalize(hm), main = clust_name,
-  file = file.path(paths$folder_script, fn))
-```
-
-
-## Correlation between channels
-
-```{r cell-category-correlation}
-# Define the correlation method
-cor_method <- "pearson"
-
-# Function to calculate p values
-cor_test_p <- function(x) {
-  FUN <- function(x, y) cor.test(x, y, method = cor_method)[["p.value"]]
-  z <- outer(
-    colnames(x),
-    colnames(x),
-    Vectorize(function(i, j) FUN(x[, i], x[, j]))
-  )
-  dimnames(z) <- list(colnames(x), colnames(x))
-  z
-}
-
-name_cur_assay <- "scaled"
-cur_assay <- "scaled"
-
-# Summarize the data
-hm <- summarize_heatmap(sce,
-                        expr_values = name_cur_assay,
-                        cluster_by = "cell_category",
-                        channels = channels)
-
-# Run the correlation test
-r <- cor(hm, method = cor_method)
-p <- cor_test_p(hm)
-diag(p) <- NA
-
-# Plot and save the heatmap
-fn <- paste0(paste(today, "CellCat", "Consensus", "Correlation",
-                    cur_assay, sep = "_"), ".html")
-
-heatmaply::heatmaply_cor(
-  r, node_type = "scatter",
-  point_size_mat = -log10(p), point_size_name = "-log10(p-value)",
-  label_names = c("x", "y", "Correlation"),
-  main = paste("Cell type -", cur_assay),
   file = file.path(paths$folder_script, fn))
 ```
 

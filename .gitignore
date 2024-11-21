@@ -1,1 +1,4 @@
-T1D_analysis/06_CellTypes_cells_Compressed copy.Rmd
+T1D_analysis/results/
+2024_BlockCourse/T1D_analysis/*.html
+2024_BlockCourse/T1D_analysis/*.png
+*.png

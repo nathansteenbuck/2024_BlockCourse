@@ -142,7 +142,7 @@ cat(c("\nChannels used for unsupervised clustering:",
 Now, we create new SCE objects for each cell category
 
 
-```{r}
+```{r subset-categories}
 sce_isl <- spe[, colData(spe)$cell_category == "Islet"]
 sce_immune <- spe[, colData(spe)$cell_category == "Immune"]
 sce_exo <- spe[, colData(spe)$cell_category == "Exocrine"]
@@ -178,7 +178,7 @@ we can now write the following equations:
 
 
 ## Perform Channel Decomposition
-```{r channels}
+```{r channels-un-compressed}
 channels_compressed <- c("CD44_GCG", "CD8a_INS", "CD4_ProINS", "CD3_NKX6_1", "CD20_SST")
 channels_uncompressed <- c("CD44", "GCG", "CD8a", "INS", "CD4", "ProINS", "CD3", "NKX6_1", "CD20", "SST")
 ```
@@ -227,8 +227,55 @@ coefficients <- map(channels_compressed, \(channel) {
 ```
 
 Inspect the coefficients.
-```{r}
+```{r print-coefficients}
 coefficients
+```
+
+```{r}
+N_Immune_S_Islet <- mclust::densityMclust(data = assay(sce_isl, "exprs")["CD8a_INS", ], G = 2, modelNames = "V")
+
+p <- tibble(counts = assay(sce_isl, "exprs")["CD8a_INS", ]) |> 
+  ggplot(aes(x = counts)) + geom_density() + 
+  labs(x = "arcinsh(counts): CD8a_INS",
+       y = "Density") + 
+  mytheme$standard_new() + 
+  geom_vline(xintercept = N_Immune_S_Islet$parameters$mean[2], color = "blue") + 
+  geom_vline(xintercept = max(N_Immune_S_Islet$data[N_Immune_S_Islet$classification == 1,]), color = "orange")
+
+fn <- paste0(today, "_CD8a_INS_density_Islet.png")
+do.save(fn, p, width = 10, height = 10)
+```
+
+Show CD8a_INS Distribution for Immune Cells:
+```{r}
+N_Islet_N_Immune <- mclust::densityMclust(data = assay(sce_immune, "exprs")["CD8a_INS", ], G = 2, modelNames = "V")
+
+p <- tibble(counts = assay(sce_immune, "exprs")["CD8a_INS", ]) |> 
+  ggplot(aes(x = counts)) + geom_density() + 
+  labs(x = "arcinsh(counts): CD8a_INS",
+       y = "Density") + 
+  mytheme$standard_new() + 
+  geom_vline(xintercept = N_Islet_N_Immune$parameters$mean[2], color = "blue") + 
+  geom_vline(xintercept = max(N_Islet_N_Immune$data[N_Islet_N_Immune$classification == 1,]), color = "orange")
+print(p)
+fn <- paste0(today, "_CD8a_INS_density_Immune.png")
+do.save(fn, p, width = 10, height = 10)
+```
+
+Show CD8a_INS Distribution for Exocrine Cells:
+```{r}
+N_Islet_N_Immune <- mclust::densityMclust(data = assay(sce_exo, "exprs")["CD8a_INS", ], G = 2, modelNames = "V")
+
+p <- tibble(counts = assay(sce_exo, "exprs")["CD8a_INS", ]) |> 
+  ggplot(aes(x = counts)) + geom_density() + 
+  labs(x = "arcinsh(counts): CD8a_INS",
+       y = "Density") + 
+  mytheme$standard_new() + 
+  geom_vline(xintercept = N_Islet_N_Immune$parameters$mean[1], color = "blue") + 
+  geom_vline(xintercept = max(N_Islet_N_Immune$data[N_Islet_N_Immune$classification == 1,]), color = "orange")
+print(p)
+fn <- paste0(today, "_CD8a_INS_density_Immune.png")
+do.save(fn, p, width = 10, height = 10)
 ```
 
 ## Estimate coefficients of normal distributions (Noise + Signal)
@@ -253,20 +300,17 @@ estimated_coeffs <- purrr::pmap(coefficients |> dplyr::select(1:6),
       c(1, 0, 0, 1, 0, 0, 0, 0),  # M_S_Immune_N_Islet = mu_S_CD20 + mu_N_SST
       c(0, 1, 1, 0, 0, 0, 0, 0),  # M_N_Immune_S_Islet = mu_N_CD20 + mu_S_SST
       c(0, 0, 1, 1, 0, 0, 0, 0),  # M_N_Islet_N_Immune = mu_N_SST + mu_N_CD20
-
       c(0, 0, 0, 0, 1, 0, 0, 1),  # V_S_Immune_N_Islet = sigma2_S_CD20 + sigma2_N_SST
       c(0, 0, 0, 0, 0, 1, 1, 0),  # V_N_Immune_S_Islet = sigma2_N_CD20 + sigma2_S_SST
       c(0, 0, 0, 0, 0, 0, 1, 1),   # V_N_Immune_N_Islet = sigma2_N_SST + sigma2_N_CD20
       c(fraction_mu, -1, 0, 0, 0, 0, 0, 0),  # fraction_mu * mu_S_CD20 - S_SST = 0
-      c(0, 0, 0, 0, fraction_sigma, -1, 0, 0), # fraction_sigma * V_S_CD20 - V_S_SST = 0
       c(0,0,fraction_mu,-1, 0, 0, 0, 0),  # fraction_mu * mu_N_CD20 - mu_N_SST = 0
-      c(0,0,0,0, 0, 0, fraction_sigma, -1)  # fraction_sigma * V_N_CD20 - V_N_SST = 0
     )
 
     # Right-hand side (means and variances combined)
     B <- c(
       M_S_Immune_N_Islet, M_N_Immune_S_Islet, M_N_Immune_N_Islet,
-      V_S_Immune_N_Islet, V_N_Immune_S_Islet, V_N_Immune_N_Islet, 0,0,0,0
+      V_S_Immune_N_Islet, V_N_Immune_S_Islet, V_N_Immune_N_Islet, 0,0
     )
 
     # Solve by non-negative least squares
@@ -632,7 +676,7 @@ sce_immune_2
 ```
 
 ### Exocrine + Stroma + Other.
-```{r}
+```{r combine-non-islet-immune-cells}
 sce_stroma$sample_id <- paste0(sce_stroma$sample_id, "_stroma")
 sce_exo$sample_id <- paste0(sce_exo$sample_id, "_exo")
 # sce_other$sample_id <- paste0(sce_other$sample_id, "_other")
@@ -640,7 +684,48 @@ sce_exo$sample_id <- paste0(sce_exo$sample_id, "_exo")
 sce_rest <- cbind(sce_stroma, sce_exo, sce_other)
 ```
 
-```{r assign_exo}
+```{r channel-decomposition-rest}
+test_df <- t(assay(sce_rest, "exprs")) |>  
+  tibble::as_tibble(rownames = "cell_id") |> 
+  select(all_of(channels_compressed), cell_id) |> 
+  tidyr::pivot_longer(cols = channels_compressed, names_to = "channel", values_to = "value")
+
+test2_df <- full_coeffs |> 
+  mutate(Immune_Islet_N_frac = mu_N_Immune/mu_N_Islet) |> 
+  mutate(Islet_Immune_N_frac = mu_N_Islet/mu_N_Immune) |>
+  select(channel, Immune_Islet_N_frac, Islet_Immune_N_frac)
+
+calc_df <- test_df |> 
+  left_join(test2_df, by = "channel") |> 
+  # change CD3_NKX6_1 to CD3_NKX6.1
+  mutate(channel = ifelse(channel == "CD3_NKX6_1", "CD3_NKX6.1", channel)) |>
+  tidyr::separate(channel, into = c("Immune_ch", "Islet_ch"), sep = "_") |> 
+  mutate(Immune_N = Immune_Islet_N_frac * value) |>
+  mutate(Islet_N = Islet_Immune_N_frac * value)
+
+calc_df_2 <- calc_df |> 
+  select(-c(Immune_Islet_N_frac, Islet_Immune_N_frac, value)) |>
+  tidyr::pivot_wider(id_cols = cell_id, names_from = c(Immune_ch, Islet_ch), values_from = c(Immune_N, Islet_N))
+
+results_rest_optim <- calc_df_2 |> 
+  # rename from Islet_N_CD20_SST to SST
+  # rename from Immune_N_CD20_SSt to CD20
+  # rename from Islet_N_CD3_NKX6.1 to NKX6.1
+  # rename from Immune_N_CD3_NKX6.1 to CD3
+  dplyr::rename_with(~stringr::str_replace(., "Immune_N_CD44_GCG", "CD44")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Immune_N_CD8a_INS", "CD8a")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Immune_N_CD4_ProINS", "CD4")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Immune_N_CD3_NKX6.1", "CD3")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Immune_N_CD20_SST", "CD20")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Islet_N_CD20_SST", "SST")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Islet_N_CD3_NKX6.1", "NKX6.1")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Islet_N_CD8a_INS", "INS")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Islet_N_CD4_ProINS", "ProINS")) |>
+  dplyr::rename_with(~stringr::str_replace(., "Islet_N_CD44_GCG", "GCG"))
+
+```
+
+```{r exo-decomposition}
 set.seed(222)
 results_rest  <- 
   purrr::pmap(full_coeffs, \(mu_S_Immune, mu_S_Islet, mu_N_Immune, mu_N_Islet, sigma2_S_Immune, sigma2_S_Islet, sigma2_N_Immune, sigma2_N_Islet, channel, threshold_Islet, threshold_Immune) {
@@ -690,9 +775,8 @@ df_decomposed <- df |>
   mutate(GCG = results_rest_optim$GCG) |>
   mutate(INS = results_rest_optim$INS) |>
   mutate(SST = results_rest_optim$SST) |> 
-  mutate(NKX6_1 = results_rest_optim$NKX6_1) |>
+  mutate(NKX6_1 = results_rest_optim$NKX6.1) |>
   mutate(ProINS = results_rest_optim$ProINS)
-
 
 # Uncomrpessed panel now as rowData. 
 fn_panel <- file.path(paths$folder_in, paste0("panel_", "Uncompressed", ".csv"))
@@ -716,7 +800,7 @@ sce <- cbind(sce_isl_2, sce_immune_2, sce_rest_2)
 ```
 
 ```{r save-rds-decomposed}
-fn <- file.path(paths$folder_script, paste0(paths$object_type, "_", paths$panel_type, "decomposed.rds"))
+fn <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, "sce.rds"))
 saveRDS(sce, fn)
 # sce <- readRDS(fn); sce_rest_2 <- sce[, sce$cell_category %in% c("Exocrine", "Stroma", "Other")]; 
 # sce_immune_2 <- sce[, sce$cell_category == "Immune"]; sce_isl_2 <- sce[, sce$cell_category == "Islet"]
@@ -755,7 +839,6 @@ reducedDim(sce_sub, dimred_name) <- cur_umap
 
 
 ```{r dimred-clusters}
-
 cur_dat <- scuttle::makePerCellDF(sce_sub, features = rownames(sce_sub),
                                   exprs_values = cur_assay) |>
                 dplyr::select(c(all_of(channels_uncompressed), paste0(dimred_name, ".1"), 
@@ -862,11 +945,11 @@ clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-clust_other <- c(1, 12, 3, 13)
-clust_delta <- c(10, 6, 2)
-clust_beta <- c(9, 7, 11) 
-clust_gamma <- c(18)
-clust_alpha <- c(4, 8, 16, 15,17, 14, 5) # until 14 confirmed.
+clust_other <- c(8, 10)
+clust_delta <- c(12)
+clust_beta <- c(5:7, 9) 
+clust_gamma <- c(14)
+clust_alpha <- c(1:4, 11, 13, 15:17) # until 14 confirmed.
 all_clust <- sort(c(clust_other, clust_delta, clust_beta, clust_gamma,
                     clust_alpha))
 
@@ -905,7 +988,7 @@ colData(sce_isl_3) |>
 ```{r viz-clust-select}
 colData(sce_isl)$Pheno1_exprs <- sce_isl_3[, colnames(sce_isl)]$Pheno1_exprs
 
-viz_clust <- c(6, 2, 17, 14, 13, 16, 15, 5) # Select cluster(s) to visualize.
+viz_clust <- c(10, 4, 2, 5, 8) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "exprs"
 ```
@@ -1042,7 +1125,7 @@ heatmaply::heatmaply(
     file = file.path(paths$folder_script, fn))
 ```
 
-```{r cellcats-pheno-scaled}
+```{r celltypes-immune-pheno-scaled}
 clust_methods <- c("Pheno1")
 clust_assay <- c("exprs")
 
@@ -1050,14 +1133,15 @@ clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-clust_tcd4 <- c(20)
-clust_tcd8 <- c(14, 10) # 14 confirmed.
-clust_other <- c(6, 3, 13, 5, 17, 9, 18, 12) # 6 = likely NK-cells.
+clust_tcd4 <- c(21)
+clust_tcd8 <- c(19) # 14 confirmed.
+clust_tdn <- c()
+clust_other <- c(20, 16, 17, 1, 6, 7, 9, 10, 11, 14) # 6 = likely NK-cells.
 clust_B <- c()
-clust_neutrophil <- c(1, 2) # confirmed.
-clust_macrophage <- c(4, 15, 7, 16, 11, 19, 8) # 15, 7 confirmed.
+clust_neutrophil <- c(3, 4) # confirmed.
+clust_macrophage <- c(15, 12, 13, 8, 5, 2, 18) # 15, 7 confirmed.
 
-all_clust <- sort(c(clust_tcd4, clust_tcd8, clust_B, clust_neutrophil,
+all_clust <- sort(c(clust_tcd4, clust_tcd8, clust_tdn, clust_B, clust_neutrophil,
                     clust_macrophage, clust_other))
 
 if ((!length(unique(all_clust)) ==
@@ -1079,6 +1163,8 @@ colData(sce_immune_3)[colData(sce_immune_3)[, clust_name] %in% clust_macrophage,
                    "cell_type"] <- "Myeloid"
 colData(sce_immune_3)[colData(sce_immune_3)[, clust_name] %in% clust_other,
                     "cell_type"] <- "Other" 
+colData(sce_immune_3)[colData(sce_immune_3)[, clust_name] %in% clust_tdn,
+                   "cell_type"] <- "T_DN"
 ```
 
 ```{r immune-cell-abundance}
@@ -1098,7 +1184,7 @@ colData(sce_immune_3) |>
 ```{r viz-clust-select}
 colData(sce_immune)$Pheno1_exprs <- sce_immune_3[, colnames(sce_immune)]$Pheno1_exprs
 
-viz_clust <- c(13, 19, 8, 5, 17, 1, 9, 3) # Select cluster(s) to visualize.
+viz_clust <- c(20, 14, 11, 10, 18) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "exprs"
 ```
@@ -1145,8 +1231,6 @@ if (!is.null(viz_clust)) {
   sce_viz$ImageName <- gsub(image_extension, "", sce_viz$image_fullname)
 }
 ```
-
-FIXME: Make channel decomposition on pixel level aswell, such that we can visualize the decomposed channels.
 
 ### Interactive with Cytoviewer
 
@@ -1218,7 +1302,6 @@ clust_freq
 ```
 
 ```{r heatmap-clusters-markers}
-
 cur_assay <- "exprs"
 clust_name <- paste(cur_method, cur_assay, sep = "_")
 message(clust_name)
@@ -1248,11 +1331,17 @@ clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-clust_other <- c(9, 20, 16, 11)
-clust_acinar <- c(10, 3, 5, 13, 15, 19, 6, 12, 17)
-clust_ductal <- c(2, 8, 18, 4, 7)
-clust_fibro_sm <- c(1)
-clust_endo <- c(14)
+#clust_other <- c(9, 20, 16, 11)
+#clust_acinar <- c(10, 3, 5, 13, 15, 19, 6, 12, 17)
+#clust_ductal <- c(2, 8, 18, 4, 7)
+#clust_fibro_sm <- c(1)
+#clust_endo <- c(14)
+
+clust_other <- c(10, 6, 11, 2)
+clust_acinar <- c(24, 15, 7, 8, 9, 23, 17, 12, 4, 5, 16, 19)
+clust_ductal <- c(13, 18, 22, 14, 21, 20)
+clust_fibro_sm <- c(3)
+clust_endo <- c(1)
 
 all_clust <- sort(c(clust_acinar, clust_ductal, clust_fibro_sm, clust_endo, clust_other))
 
@@ -1282,15 +1371,15 @@ sce$cell_type <- "0"
 sce[, colnames(sce_isl_3)]$cell_type <- sce_isl_3$cell_type
 sce[, colnames(sce_immune_3)]$cell_type <- sce_immune_3$cell_type
 sce[, colnames(sce_exo_3)]$cell_type <- sce_exo_3$cell_type
-sce
+table(sce$cell_type)
 ```
 
 ### Save SCE
 ```{r save-sce}
 fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 message(assayNames(sce))
-message(reducedDimNames(sce))
 saveRDS(sce, fn_spe)
+# readRDS(fn_spe)
 ```
 
 # **Visualize clusters**
@@ -1323,16 +1412,15 @@ sce_sub$cell_type <- sce[, metadata(spe)$subset]$cell_type
 
 # Prepare the data
 cur_dat <- makePerCellDF(sce_sub, use_dimred = TRUE) |>
-  mutate(case_id = factor(case_id, levels = metadata(sce)$cases),
-         donor_type = factor(donor_type, levels = metadata(sce)$stages)) |>
   arrange(case_id, donor_type)
 
 # Plot
+cur_dimred <- "UMAP"
 dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
 clust_name <- "cell_type"
 
 p <- plot_dim_red(cur_dat, dimred_name, clust_name,
-                  sample = TRUE, size = 0.1, alpha = 1)
+                  sample = TRUE, size = 1, alpha = 1)
 print(p)
 
 fn <- paste0(paste(today, clust_name, cur_dimred,
@@ -1340,13 +1428,11 @@ fn <- paste0(paste(today, clust_name, cur_dimred,
 do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
 
-### Cell categories heatmap
+### Cell Type heatmap
 
 ```{r cellcats-heatmap}
-
 clust_name <- "cell_type"
 channels_heatmap <- rownames(sce)[!rownames(spe) %in% c("DNA1", "DNA3", "H3", "Rb", "PTPRN", "GLUT1", "FOXP3")]
-
 
 # Summarize the data
 hm <- summarize_heatmap(sce[, metadata(sce)$subset],
@@ -1357,7 +1443,7 @@ hm <- summarize_heatmap(sce[, metadata(sce)$subset],
 # Display the heatmap
 fn <- paste0(paste(today, clust_name, "Heatmap",
                   sep = "_"), ".html")
-
+set.seed(1996)
 heatmaply(
 heatmaply::normalize(hm), main = clust_name,
 file = file.path(paths$folder_script, fn))

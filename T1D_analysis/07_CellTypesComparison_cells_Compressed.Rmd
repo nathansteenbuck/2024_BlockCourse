@@ -69,9 +69,10 @@ today <- gsub("-", "", Sys.Date())
 
 ##  Read in the data
 
-Load the SpatialExperiment (SPE) object saved at the previous step.
+Load the SpatialExperiment (SPE) object from the compressed dataset.
 
-```{r load-data}
+```{r load-data-compressed}
+
 fn_spe_compressed <- file.path(paths$folder_out, paste0(paths$object_type, "_", "Compressed.rds"))
 spe_compressed <- readRDS(fn_spe_compressed)
 print(spe_compressed)
@@ -80,6 +81,8 @@ compressed_df <- scuttle::makePerCellDF(spe_compressed, use.dimred = FALSE) |>
   mutate(method = "Compressed") |> 
   select(case_id, panel, cell_number, cell_type, cell_category, method, image_id)
 ```
+
+Load the SpatialExperiment (SPE) object from the uncompressed dataset.
 
 ```{r load-data2}
 fn_spe_uncompressed <- file.path(paths$folder_out, paste0(paths$object_type, "_", "Uncompressedsce.rds"))
@@ -91,45 +94,117 @@ uncompressed_df <- scuttle::makePerCellDF(spe_uncompressed, use.dimred = FALSE) 
   select(case_id, panel, cell_number, cell_type, cell_category, method, image_id)
 ```
 
-```{r load-data3}
+Comparison of total cell numbers per Cell Types between the two datasets.
+
+```{r barplot-all-cts}
 # Dodged Barplot of Cell Types
 df <- compressed_df  |> 
   bind_rows(uncompressed_df) |> 
   mutate(method = factor(method, levels = c("Compressed", "Uncompressed"))) |> 
   as_tibble()
 
-df |> 
-  ggplot(aes(x = cell_type, fill = method)) +
-  geom_bar(position = "dodge") +
+p <- df |> 
+  dplyr::count(cell_type, method) |>
+  ggplot(aes(x = cell_type, y = n, fill = method)) +
+  geom_bar(stat = "identity", position = "dodge") +
   mytheme$standard()
+
+print(p)
+fn <- file.path(paths$folder_script, paste0(today, "_CellTypes_Comparison_Compressed_Uncompressed", ".png"))
+do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
 
-```{r}
-df |> 
+Reduced plot for the most important cell types.
+```{r barplot-beta-t}
+p <- df |> 
   filter(cell_type %in% c("Beta", "T_CD4", "T_CD8", "T_cell")) |> 
-  ggplot(aes(x = case_id, y = cell_number, fill = method)) +
+  mutate(cell_type = ifelse(cell_type %in% c("T_CD4", "T_CD8"), "T_cell", cell_type)) |>
+  dplyr::count(cell_type, method, case_id) |>
+  ggplot(aes(x = case_id, y = n, fill = method)) +
   geom_bar(stat = "identity", position = "dodge") +
   mytheme$standard() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
   facet_wrap(~cell_type, scales = "free_y")
+print(p)
+
+fn <- file.path(paths$folder_script, paste0(today, "_CellTypes_Comparison_Compressed_Uncompressed_Reduced", ".png"))
+do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
 
+Now, we will calculate the correlation between the cell types per ROI.
 
-Visualize as a heatmap.
-```{r correlation}
+```{r correlations-t-beta-per-roi}
 # Visualize Cell-Category Correlation per ROI.
-
-
-# Calculate Cell-Type Correlation per ROI.
-df |>
-  filter(cell_type != "Islet_Other") |> 
-  mutate(cell_type = ifelse(cell_type == "Macrophage", "Myeloid", cell_type)) |>
-  mutate(cell_type = ifelse(cell_type %in% c("T_CD4", "T_CD8"), "T_cell", cell_type)) |>
+cor_df <- df |> 
   mutate(image_id = stringr::str_remove(image_id, "_Compressed")) |> 
   mutate(image_id = stringr::str_remove(image_id, "_Uncompressed")) |>
+  mutate(cell_type = ifelse(cell_type %in% c("T_CD4", "T_CD8"), "T_cell", cell_type)) |>
   dplyr::count(method, case_id, cell_type, image_id) |> # Count occurrences
-  tidyr::pivot_wider(names_from = method, values_from = n)
+  tidyr::pivot_wider(names_from = method, values_from = n, values_fill = 0)
+
+p <- cor_df |> 
+  filter(cell_type %in% c("Beta")) |> 
+  ggplot(aes(x = Compressed, y = Uncompressed)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  mytheme$standard_new() +
+  labs(title = "",
+       x = "Compressed: Beta-cell Number", y = "Uncompressed: Beta-cell Number")
+print(p)
+
+fn <- file.path(paths$folder_script, paste0(today, "_Correlation_Compressed_Uncompressed_Beta",  ".png"))
+do.call(ggsave, c(list(fn, p), plotsave_param))
+
+p <-  cor_df |> 
+  filter(cell_type %in% c("T_cell")) |> 
+  ggplot(aes(x = Compressed, y = Uncompressed)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  mytheme$standard_new() +
+  labs(title = "",
+       x = "Compressed: Beta-cell Number", y = "Uncompressed: Beta-cell Number")
+print(p)
+
+fn <- file.path(paths$folder_script, paste0(today, "_Correlation_Compressed_Uncompressed_Beta",  ".png"))
+do.call(ggsave, c(list(fn, p), plotsave_param))
+```
+
+Show correlations for all Cell types.
+```{r correlation2}
+# Calculate Cell-Type Correlation per ROI.
+p <- cor_df |> 
+  #filter(cell_type != "Fibro_SM") |> 
+  filter(cell_type != "Other") |>
+  group_by(cell_type) |> 
+  summarise(cor = cor(Compressed, Uncompressed, method = "pearson")) |> 
+  # Plot heatmap
+  ggplot(aes(x = cell_type, y = "Correlation Cell Number per ROI", fill = cor)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(na.value = "gray", limits = c(0, 1), name = "Correlation") + 
+  mytheme$standard_new() +
+  theme(
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  ggtitle("Compressed vs Uncompressed") + 
+  coord_flip()
+print(p)
+
+fn <- file.path(paths$folder_script, paste0(today, "_Correlation_Compressed_Uncompressed", ".png"))
+do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
 
 
+Finally, calculate the correlation between all cell types per ROI, 
+i.e. make a full correlation matrix.
 
+```{r full-correlations-per-roi}
+cor_df <- df |> 
+  mutate(image_id = stringr::str_remove(image_id, "_Compressed")) |> 
+  mutate(image_id = stringr::str_remove(image_id, "_Uncompressed")) |>
+  mutate(cell_type = ifelse(cell_type %in% c("T_CD4", "T_CD8"), "T_cell", cell_type)) |>
+  dplyr::count(method, case_id, cell_type, image_id) |> # Count occurrences
+  tidyr::pivot_wider(names_from = c(cell_type, method), values_from = n, values_fill = 0)
+
+corrplot::corrplot(cor(cor_df[, -c(1:2)]), method = "color", type = "upper", tl.col = "black")
+```
