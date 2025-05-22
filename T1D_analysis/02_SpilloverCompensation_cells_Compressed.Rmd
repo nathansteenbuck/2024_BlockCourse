@@ -8,7 +8,7 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-script_name <- "02_SpilloverCompensation_cells_Uncompressed.Rmd"
+script_name <- "02_SpilloverCompensation_cells_Compressed.Rmd"
 cur_user <- Sys.info()[["user"]]
 
 source(file.path("/", "mnt", "central_nas", "projects", 
@@ -29,7 +29,7 @@ paths$prev <- paste("01_ImportData", paths$object_type, paths$panel_type, sep = 
 ```
 
 You can run this script as: 
-Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/03_TransformCorrect_cells_Compressed.Rmd')"
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/02_SpilloverCompensation_cells_Compressed.Rmd')"
 
 # **Goals**
 
@@ -89,43 +89,113 @@ print(spe)
 ```
 
 
-
-# **Read in spillover measurements**
+# **Read in spillover compensation slide**
 
 On the spillover compensation slide, each spot contains a single metal isotope 
 and is measured as a single region of interest (ROI). For each ROI, a .TXT file
 containing the pixel intensities is generated.  
-  
-All .TXT files should be placed in the `folder_spillcomp` folder defined below.
 A separate spillover compensation slide must be generated for each panel. In 
 addition, the spillover compensation was measured once per batch of 
 acquisitions, generating one set of .TXT files per batch.
 
-```{r path-spillcomp}
-# Folder containing the spillover slide acquisitions
-folder_spillcomp <- file.path(paths$folder_in, "spillcomp")
 
-if (!dir.exists(folder_spillcomp)) stop("Spillover folder not found")
+Since, the Hyperion-XTi, IMC data is only outputted as .mcd, not .txt anymore, breaking standard pipelines.
+Therefore, we have converted the .mcds files to .tiffs files (without HPF) using the `steinbock` package.
+Now, we continue with the .tiffs.
+
+```{r get-directories}
+## Directory with :tiffs
+directory <- file.path(paths$folder_in, "img_spillcomp", paths$panel_type)
+if (!dir.exists(directory)) stop("Directory with .tiffs not found")
+
+# Image metadata
+fn_image_metadata <- file.path(paths$folder_in, paste0("images_", paths$panel_type, "_spillcomp.csv"))
+images <- readr::read_csv(fn_image_metadata, show_col_types = FALSE)
+
+if (!file.exists(fn_image_metadata)) stop("Image metadata file not found")
+
+# Panel information.
+panel <- rowData(spe)
 ```
 
+
+Check for .tiff files in the directory.
+Loop through files, and write the pixel intensities to a dataframe.
+```{r read-tiffs}
+files <- list.files(directory, pattern = "\\.tiff$", full.names = TRUE)
+total <- data.frame()
+
+# Loop through files in the directory
+for (file_name in files) {
+  # Read TIFF image
+  numeric_part <- basename(file_name)
+  img <- EBImage::readImage(file_name)
+  
+  # Process the image (assuming similar processing as in your code)
+  img <- lapply(1:nrow(panel), function(x) as.vector(img[,,x]))
+  img <- as.data.frame(img)
+  colnames(img) <- 1:length(colnames(img))
+  img$spot <- rep(numeric_part, nrow(img))
+  
+  # Bind the data to the total dataframe
+  total <- rbind(total, img)
+}
+```
+
+Convert to tibble. Rename with metal names.
+```{r path-spillcomp}
+## The names were read-in incorrectly, so we need to fix them. 
+total <- total |> as_tibble() |> 
+  # rename_with(~ panel$metal, -spot) |> 
+  mutate(spot = gsub("SpillComp_Compressed_Batch1_", "", spot)) |> 
+  # Ho_165_33_Ho_165.tiff into Ho16533 -> to troubleshoot wrong naming.
+  mutate(spot_id = gsub("([A-Za-z]+)_([0-9]+)_([0-9]+).*", "\\1\\2\\3", spot)) |> 
+  select(-spot)
+
+total
+```
+
+
+Important: for compressed, we have reduced channels (27x).
+But: we have acquired 37 spots for 32 metals. 5 spots were double (compressed).
+
+
+The naming convention was wrong - adapt.
+Skip for now?
+```{r}
+## Always identify for a given spot, the column with the highest value
+## and assign it to the corresponding metal.
+results <- total |> 
+  group_by(spot_id) |>
+  summarise(across(1:(nrow(panel)-1), \(.x) mean(.x, na.rm = TRUE))) |> 
+  tidyr::pivot_longer(cols = 1:(nrow(panel)-1), names_to = "metal", values_to = "intensity") |> 
+  group_by(spot_id) |>
+  summarise(metal = metal[which.max(intensity)])
+
+# Dictionary for translation.
+results
+
+## 
+total <- total |> 
+  inner_join(results, by = "spot_id") |> 
+  mutate(spot_id = metal) |> 
+  select(-metal)
+```
 
 Create one `SingleCellExperiment` object containing the spillover measurements 
 per batch. Transform the pixel-counts by arcsinh() with a co-factor of 5.
 For downstream analyses, the pixel counts are arcsinh-transformed 
 using a cofactor of 1.
 
-```{r import-spillcomp-acquisitions}
-# List the batches
-batches <- sort(paste0("Batch", unique(spe$batch)))
-spillcomp <- vector(mode = "list", length = length(batches))
+```{r}
+all_counts <- total[,-(nrow(panel)+1)]
+sce <- SingleCellExperiment(assays = list(counts = t(all_counts)))
 
-spillcomp <- purrr::map(batches, function(x) {
-  sce <- imcRtools::readSCEfromTXT(file.path(folder_spillcomp, paths$panel_type, x),
-                                   verbose = FALSE)
-  assay(sce, "exprs") <- asinh(counts(sce)/5)
-  return(sce)
-})
-names(spillcomp) <- batches
+colData(sce) <- DataFrame(total[,(nrow(panel)+1), drop=FALSE])
+rowData(sce)$sample_mass <- as.numeric(gsub("\\D", "", rownames(sce)))
+colData(sce)$sample_mass <- as.numeric(gsub("\\D", "", sce$spot_id))
+rowData(sce)$channel_name <- paste0(rownames(sce), "Di")
+assay(sce, "exprs") <- asinh(counts(sce)/5)
 ```
 
 # **Measure spillover**
@@ -143,7 +213,15 @@ wrong metal isotope was spotted on the spillover compensation slide.
 ## Spillover heatmaps
 
 ```{r spillcomp-heatmaps, fig.height=7, fig.width=7}
+plotSpotHeatmap(sce, spot_id = "spot_id", statistic = "mean", cluster_rows = FALSE, cluster_cols= FALSE, 
+  order_metals = TRUE)
+
+plotSpotHeatmap(sce, spot_id = "spot_id", log = FALSE, threshold = 100)
+
+
+
 # Log10 median pixel counts per spot and channels
+
 plot_list <- purrr::map(spillcomp, plotSpotHeatmap)
 
 purrr::map2(plot_list, batches, \(plot_x, batch) {
@@ -476,7 +554,6 @@ Save the updated SPE object containing the spillover-compensated counts (as
 deleted in the next script.
 
 ```{r save-spe}
-fn_spe <- file.path(paths$folder_script, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
-print(spe)
+fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 saveRDS(spe, fn_spe)
 ```

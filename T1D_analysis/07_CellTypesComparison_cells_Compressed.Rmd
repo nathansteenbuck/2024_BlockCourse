@@ -72,7 +72,6 @@ today <- gsub("-", "", Sys.Date())
 Load the SpatialExperiment (SPE) object from the compressed dataset.
 
 ```{r load-data-compressed}
-
 fn_spe_compressed <- file.path(paths$folder_out, paste0(paths$object_type, "_", "Compressed.rds"))
 spe_compressed <- readRDS(fn_spe_compressed)
 print(spe_compressed)
@@ -162,7 +161,7 @@ p <-  cor_df |>
   geom_smooth(method = "lm") +
   mytheme$standard_new() +
   labs(title = "",
-       x = "Compressed: Beta-cell Number", y = "Uncompressed: Beta-cell Number")
+       x = "Compressed: T-cell Number", y = "Uncompressed: T-cell Number")
 print(p)
 
 fn <- file.path(paths$folder_script, paste0(today, "_Correlation_Compressed_Uncompressed_Beta",  ".png"))

@@ -260,7 +260,6 @@ Q1: How many cells are in the dataset?
 Q2: How many ROIs did we acquire?
 Q3: What is the age of the organ donors?
 
-
 # **Save cell data**
 
 Save the generated SPE object for downstream analyses.
