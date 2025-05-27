@@ -45,6 +45,8 @@ For cell type annotation we perform unsupervised clustering, and then relate the
 The resulting cell categories, which are used in downstream analyses are stored
 as `colData(spe)$cell_category`.
 
+Here, the idea is to use the MINIMAL dataset to generate cell categories that can be used for the T1D dataset.
+
 # **Settings**
 
 ## Load packages
@@ -80,12 +82,6 @@ Load the SpatialExperiment (SPE) object saved at the previous step.
 fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 spe <- readRDS(fn_spe)
 print(spe)
-```
-
-```{r remove-6399}
-# Remove 6399.
-spe <- spe[, colData(spe)$case_id != "6399"]
-
 ```
 
 # **Clustering**
@@ -142,8 +138,8 @@ cat(c("\nChannels used for unsupervised clustering:",
       channels_clust[channels_clust %in% rownames(spe)]))
 
 # Select Channels we will do our Category assignment on.
-channels_cat <- c("SYP", "AMY", "KRT19", 
-                  "CD45", "MPO", "CD68", 
+channels_cat <- c("SYP", "AMY", "CK19", 
+                  "CD45RA", "CD45RO", "MPO", "CD68", 
                   "SMA", "CD31")
 cat(c("\nChannels used for cell category assignment:",
       channels_cat[channels_cat %in% rownames(spe)]))
@@ -209,6 +205,7 @@ suppressPackageStartupMessages(c(
 ))
 ```
 
+Subset SCE-CAT object.
 ```{r}
 set.seed(222)
 if (!("subset" %in% names(metadata(sce_cat)))) {
@@ -294,7 +291,7 @@ hm <- summarize_heatmap(sce_cat,
 fn <- paste0(paste(today, "Clusters", clust_name, "Heatmap",
                     sep = "_"), ".html")
 print(fn)
-heatmaply(
+heatmaply::heatmaply(
     heatmaply::normalize(hm), main = clust_name, 
     file = file.path(paths$folder_script, fn))
 
@@ -312,25 +309,14 @@ hm <- summarize_heatmap(sce_isl_sub,
 fn <- paste0(paste(today, "Clusters", clust_name, "Heatmap_reduced",
                     sep = "_"), ".html")
 print(fn)
-heatmaply(
+heatmaply::heatmaply(
     heatmaply::normalize(hm), main = clust_name, 
     file = file.path(paths$folder_script, fn))
 ```
 
 
-PUt these into the following compartments:
+Put these into the following compartments:
 Islet, Immune, Exocrine, Stroma, Other.
-
-
-Exocrine: 25, ...
-Islet: 20, ...
-
-clust_other <- c(5, 7, 17, 22)
-clust_islet <- c(18, 19, 20, 21)
-clust_immune <- c(6, 8, 9, 14, 16)
-clust_stroma <- c(11, 15)
-clust_exocrine <- c(1, 25, 24, 23, 8, 4, 2, 12, 13, 3, 10)
-
 
 ## Visualize clusters with cytomapper and cytoviewer
 
@@ -342,10 +328,45 @@ Additional information we can use is their spatial localization of cell types, i
 ### Select cluster(s) and assay to show
 
 ```{r viz-clust-select}
-viz_clust <- c(3, 10, 22, 6) # Select cluster(s) to visualize.
+viz_clust <- c(9, 15, 8, 3, 6, 5, 2) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "scaled"
 ```
+
+
+Adjust function.
+```{r}
+imgloader <- function(x, image_dir, image_names,
+                     suffix_rem = "", suffix_add = "",
+                     bit_depth = 16, type, ...) {
+  require(cytomapper)
+
+  image_list <- file.path(image_dir, image_names)
+
+  # Test if the image list exist
+  test_exist <- which(!file.exists(image_list))
+  if (length(test_exist) > 0) {
+    stop(c("The following images were not found:\n",
+           paste(image_list[test_exist], collapse = "\n")))
+  } else {
+    # Load and scale the images
+    images <- loadImages(image_list, ...)
+    # images <- scaleImages(images, (2 ^ bit.depth) - 1)
+
+    # Add image names to metadata
+    mcols(images)$ImageName <- gsub(suffix_rem, "", names(images))
+    mcols(images)$ImageName <- paste0(mcols(images)$ImageName, suffix_add)
+
+    # Add channel names
+    if (type == "stacks") {
+      print("Loading image stacks")
+      channelNames(images) <- rownames(x)
+    }
+    return(images)
+  }
+}
+```
+
 
 ### Load images and masks
 
@@ -437,11 +458,18 @@ clust_name <- paste(clust_methods, clust_assay, "cat", sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-clust_other <- c(5, 7, 17, 22)
-clust_islet <- c(18:21)
-clust_immune <- c(6, 8, 9, 14, 16)
-clust_stroma <- c(11, 15)
-clust_exocrine <- c(1:4, 10, 12, 13, 23:25)
+# 
+# Mesenchymal: 28, 1, 4, 26,
+# Exocrine: 26, 27, 25, 23, 7, 14, 17, 11, 13, 6, 5, 2, 3.
+# Islet: 21, 18, 19, 10.
+# Immune: 29, 22, 24, 12.
+# Other: 9, 15, 8.
+
+clust_other <- c(9, 15, 8)
+clust_islet <- c(21, 18, 19, 10)
+clust_immune <- c(29, 22, 24, 12)
+clust_stroma <- c(28, 1, 4, 16, 20)
+clust_exocrine <- c(26, 27, 25, 23, 7, 14, 17, 11, 13, 6, 5, 2, 3)
 
 all_clust <- sort(c(clust_islet, clust_immune, clust_exocrine, clust_stroma,clust_other))  
 

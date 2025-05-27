@@ -28,6 +28,9 @@ knitr::opts_chunk$set(echo = TRUE)
 paths$prev <- paste("03_TransformCorrect", paths$object_type, paths$panel_type, sep = "_")
 ```
 
+The script can be run directly from the command line with:
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/04_QualityControl_cells_Uncompressed.Rmd')"
+
 ## **Goals**  
   
 Perform quality controls on cell-level data.   
@@ -573,7 +576,7 @@ p <- cur_snr %>%
     mytheme$standard()+  
     ylab("Signal-to-noise ratio [log2]") +
     xlab("Signal intensity [log2]")
-
+p
 fn <- paste0(paste(today, "SNRvsSignalIntensity", sep = "_"), ".png")
 do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
@@ -623,6 +626,8 @@ fn <- paste0(paste(today, "SNRvsSignalIntensityCell", sep = "_"), ".png")
 do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
 
+Q: How do you intereprete the SNR values?
+
 # **Dimensionality reduction**
 
 Dimensionality reduction algorithms are applied on different count transformations (`assays`) and stored in the `reducedDims` of the SPE object. 
@@ -655,11 +660,12 @@ dimred_sel <- c("UMAP")
 writeLines(c("Dimensionality reduction:", dimred_sel))
 
 # Select the assay(s) of interest
-assay_sel <- c("scaled", "exprs")
+assay_sel <- c("scaled", "exprs", "fastMNN_case_id")
 writeLines(c("\nAssays:", assay_sel[assay_sel %in% assayNames(spe)]))
 
 # Select the channels
-channels_dimred <- rowData(spe)[rowData(spe)$dimred == 1, ]$shortname
+# channels_dimred <- rowData(spe)[rowData(spe)$dimred == 1, ]$shortname
+channels_dimred <- rownames(spe)[!(grepl("DNA|H3", rownames(spe)))]
 cat(c("Channels:", channels_dimred[channels_dimred %in% rownames(spe)]))
 cat(c("\nNumber of channels:", length(channels_dimred)))
 
@@ -688,27 +694,28 @@ see publication.
 ```{r run-UMAP}
 # Save as variable and write assays to NULL. Reduces memory overhead for parallelization. 
 colnames_spe <- colnames(spe)
-
-# Add UMAPs to SPE object
-cur_assay <- "exprs"
-dimred_name <- paste("UMAP", cur_assay, sep = "_")
-print(dimred_name)
-
+dimred_name <- "UMAP"
+dimred_sel <- "UMAP"
 # Run UMAP on a cell subset
-if ((!dimred_name %in% reducedDimNames(spe_sub)) && ("UMAP" %in% dimred_sel)) {
-  # Extract Counts. 
-  if (cur_assay %in% assayNames(spe_sub)) {
-    counts <- t(assay(spe_sub, cur_assay))
-  }
-  # Run UMAP.
-  umap_model <- uwot::umap(counts, ret_model = TRUE)
-  # Extract Embedding.
-  cur_umap <- umap_model$embedding
-  colnames(cur_umap) <- c("UMAP1", "UMAP2")
-  rownames(cur_umap) <- rownames(counts)
-}
 
-reducedDim(spe_sub, dimred_name) <- cur_umap
+purrr::map(assay_sel, \(cur_assay) {
+  # Extract
+  if ((!dimred_name %in% reducedDimNames(spe)) && ("UMAP" %in% dimred_sel)) {
+    # Extract Counts. 
+    if (cur_assay %in% assayNames(spe)) {
+      counts <- t(assay(spe, cur_assay))
+    }
+    # Run UMAP.
+    umap_model <- uwot::umap(counts, ret_model = TRUE)
+    # Extract Embedding.
+    cur_umap <- umap_model$embedding
+    colnames(cur_umap) <- c("UMAP1", "UMAP2")
+    rownames(cur_umap) <- rownames(counts)
+  }
+  reduceddim_name <- paste("UMAP", cur_assay, sep = "_")
+
+  reducedDim(spe, reduceddim_name) <<- cur_umap
+})
 ```
 
 ## Plot reduced dimensions
@@ -719,21 +726,23 @@ Plot selected variables on reduced dimensions.
 
 ```{r plot-dimred, fig.width=15, fig.height=10}
 # Prepare the data
-cur_dat <- makePerCellDF(spe_sub) |>
+cur_dat <- makePerCellDF(spe) |>
   dplyr::mutate(case_id = factor(case_id, levels = cases),
                 donor_type = factor(donor_type, levels = stages)) |>
   dplyr::arrange(case_id, donor_type)
 
 cur_dimred <- "UMAP"
 # Plot variables
-purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
-  dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
-  message(dimred_name)
-  p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
-                    size = 0.5, palette = palettes[[cur_var]])
-  
-  fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, p), plotsave_param))
+purrr::map(assay_sel, \(cur_assay) {
+  purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
+    dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
+    message(dimred_name)
+    p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
+                      size = 0.5, palette = palettes[[cur_var]])
+    
+    fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
+    do.call(ggsave, c(list(fn, p), plotsave_param))
+  })
 })
 ```
 
@@ -745,30 +754,34 @@ If so, what does that mean?
 
 ```{r plot-dimred-channels, fig.height=10, fig.width=15}
 # Plot marker expression
-dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
-
+cur_dimred <- "UMAP"
+purrr::map(assay_sel, \(cur_assay) {
 # Prepare the data
-if (cur_assay %in% assayNames(spe_sub)) {
-  cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels,
-                                    exprs_values = cur_assay) |>
-              dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
-                                                paste0(dimred_name, ".2")))
-} else {
-  cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels,
-                                    exprs_values = "exprs") |>
-    dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
-                                      paste0(dimred_name, ".2")))
-}
+  dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
+  if (cur_assay %in% assayNames(spe)) {
+    cur_dat <- scuttle::makePerCellDF(spe, features = channels,
+                                      exprs_values = cur_assay) |>
+                dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
+                                                  paste0(dimred_name, ".2")))
+    } else {
+      cur_dat <- scuttle::makePerCellDF(spe, features = channels,
+                                        exprs_values = "exprs") |>
+        dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
+                                          paste0(dimred_name, ".2")))
+    }
 
-cur_dat <- cur_dat |>
-  tidyr::pivot_longer(cols = all_of(channels),
-                      names_to = "channel",
-                      values_to = cur_assay)
+    cur_dat <- cur_dat |>
+      tidyr::pivot_longer(cols = all_of(channels),
+                          names_to = "channel",
+                          values_to = cur_assay)
 
-# Plot marker expression
-p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
-                            channels, force_points = TRUE)
+    # Plot marker expression
+    p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
+                                channels, force_points = TRUE)
 
-fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p), plotsave_param_large))
+    fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
+    do.call(ggsave, c(list(fn, p), plotsave_param_large))
+})
 ```
+
+Q: What do you see in the UMAPs?

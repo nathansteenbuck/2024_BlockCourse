@@ -35,7 +35,8 @@ Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/02_SpilloverCompens
 
 In mass cytometry, a small level of crosstalk between channels can occur. 
 Mainly in the channels:
-- +1/-1, & +2/-2, due to metal impurities, 
+- +1/-1,
+- And isotope impurities e.g. Sm152 with other Sm isotopes. 
 - +16 due to oxidation products.
 
 During data acquisition, this spillover is measured using a spillover 
@@ -191,6 +192,10 @@ total <- total |>
   inner_join(results, by = "spot_id") |> 
   # Now we know which metal 
   select(-spot_id)
+
+# Write spot_ids of uncompressed (and later compressed) channels.
+total |> 
+  filter(metal %in% c("GG"))
 ```
 
 Now, read in as SCE.
@@ -359,7 +364,7 @@ Save the updated SPE object containing the spillover-compensated counts (as
 deleted in the next script.
 
 ```{r save-spe}
-fn_spe <- file.path(paths$folder_script, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
+fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 print(spe)
 saveRDS(spe, fn_spe)
 ```

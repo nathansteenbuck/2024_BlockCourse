@@ -20,7 +20,6 @@ paths <- getPaths(script_name)
 knitr::opts_knit$set(root_dir = paths$cluster_home)
 do_print <- TRUE
 
-
 # Misc. Settings.
 seed <- 123456
 set.seed(seed)

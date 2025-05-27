@@ -135,6 +135,81 @@ if (!"scaled" %in% assayNames(spe)) {
 }
 ```
 
+# Batch Effect correction.
+
+## Parameters
+
+Define the channels to correct and the subset of cells to use to calculate the batch effect (see `?"batchelor-restrict"`).
+This is used later in fastMNN.
+The H3 and DNA channels are not used, as we do not expect cell type specific variance for these channels.
+This is used as a simple feature selection step.
+
+```{r fastMNN-parameters}
+# Define the subset of cells per donor to use to calculate the batch effect -> nb_cells * 95 
+nb_cells <- 1000
+
+set.seed(seed)
+cell_restrict <- as.data.frame(cbind(rn = rownames(colData(spe)),
+                                     case_id = colData(spe)$case_id)) |> 
+  group_by(case_id, .add = TRUE) |>
+  sample_n(nb_cells) |>
+  pull(rn)
+
+# Subset the SPE to the channels to correct.
+spe_sub <- spe[, cell_restrict]
+```
+
+## **FastMNN**
+
+Batch correction is performed with [FastMNN](http://bioconductor.org/packages/release/bioc/vignettes/batchelor/inst/doc/correction.html#3_mutual_nearest_neighbors) 
+from the [batchelor package](https://bioconductor.org/packages/devel/bioc/html/batchelor.html).  
+
+### Run FastMNN
+For now, we subset SPE to 1000 cells per donor. These are thought to be representative of the donor.
+
+Repeat for Case_id and Batch.
+Works better for Case_id variable.
+
+```{r fastMNN-run-caseid, message=FALSE}
+do_fast_mnn <- TRUE
+method_name <- "fastMNN"
+batch_variables <- c("case_id") # , "batch")
+channels_to_correct <- !(grepl("DNA|H3", rownames(spe)))
+
+## Run FastMNN for both batch variables.
+results <- furrr::future_map(batch_variables, \(batch_variable) {
+  assay_name <- paste0(method_name, "_", batch_variable)
+  message(assay_name)
+  if (!assay_name %in% assayNames(spe)) {
+    do_fast_mnn <- TRUE
+    set.seed(seed)
+    # Correct by donor
+    tic("FastMNN")
+    spe_mnn <- fastMNN(spe,
+                       batch = spe[[batch_variable]],
+                       restrict = list(cell_restrict),
+                       subset.row = channels_to_correct,
+                       assay.type = "exprs",
+                       d = 40,
+                       auto.merge = TRUE,
+                       correct.all = TRUE,
+                       cos.norm = FALSE,
+                       BPPARAM = MulticoreParam(),
+                       BSPARAM = BiocSingular::ExactParam())
+    toc()
+    # Extract metdata related to batch correction
+    metadata_merge <- metadata(spe_mnn)$merge.info
+    list("spe_mnn" = spe_mnn, "metadata" = metadata_merge)
+  }
+}, .options = options) |> purrr::set_names(batch_variables)
+
+## Add the corrected counts to the SPE.
+assay_name1 <- paste0(method_name, "_", batch_variables[[1]])
+assay(spe,  assay_name1) <- as.matrix(assay(results[[1]][["spe_mnn"]], "reconstructed"))
+metadata_merges <- list("Donor" = results[[1]][["metadata"]]) 
+```
+
+
 ## Save the updated SPE object
 
 Contains the new counts transformations.

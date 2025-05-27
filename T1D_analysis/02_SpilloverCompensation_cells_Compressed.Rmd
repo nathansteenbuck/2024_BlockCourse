@@ -142,17 +142,35 @@ for (file_name in files) {
 }
 ```
 
+27x mass channels open. Not one missing?
+Convert to tibble. Rename with metal names.
+```{r check-dfs}
+# nr of pixels
+nrow(total)
+
+# Nr. of unique spots = 36. Including ROI_001.
+length(unique(total$spot))
+
+# Nr. of channels (N=27)
+ncol(total) - 1
+```
+
 Convert to tibble. Rename with metal names.
 ```{r path-spillcomp}
 ## The names were read-in incorrectly, so we need to fix them. 
+## The names were read-in incorrectly, so we need to fix them. 
 total <- total |> as_tibble() |> 
-  # rename_with(~ panel$metal, -spot) |> 
+  rename_with(~ panel$metal, -spot) |> 
+  mutate(spot = ifelse(spot == "SpillComp_Compressed_Batch1_ROI_001_1_ROI_001.tiff", "ROI_001", spot)) |>
   mutate(spot = gsub("SpillComp_Compressed_Batch1_", "", spot)) |> 
   # Ho_165_33_Ho_165.tiff into Ho16533 -> to troubleshoot wrong naming.
   mutate(spot_id = gsub("([A-Za-z]+)_([0-9]+)_([0-9]+).*", "\\1\\2\\3", spot)) |> 
+  # mutate(spot_id = gsub("([A-Za-z]+)_([0-9]+).*", "\\1\\2", spot)) |>
   select(-spot)
 
-total
+# 35 unique spots (without ROI_001).
+length(unique(total$spot_id))
+unique(total$spot_id)
 ```
 
 
@@ -168,18 +186,38 @@ Skip for now?
 results <- total |> 
   group_by(spot_id) |>
   summarise(across(1:(nrow(panel)-1), \(.x) mean(.x, na.rm = TRUE))) |> 
-  tidyr::pivot_longer(cols = 1:(nrow(panel)-1), names_to = "metal", values_to = "intensity") |> 
+  tidyr::pivot_longer(cols = 2:(nrow(panel)), names_to = "metal", values_to = "intensity") |> 
   group_by(spot_id) |>
   summarise(metal = metal[which.max(intensity)])
 
 # Dictionary for translation.
-results
+results <- results |> 
+  filter(spot_id != "ROI_001") |>
+  # Bi209 counts very low.
+  mutate(metal = ifelse(spot_id == "Dy16213", "Ho165", metal)) |> 
+  mutate(metal = ifelse(spot_id == "Nd14315", "Bi209", metal)) |>
+  # IMPORTANT: Remove Uncompressed channels: 
+  filter(!spot_id %in% c("Sm1494", # Sm149: Sm1494 (C), Nd14414 (UC)
+    "Yb17136", # Yb171: Er16710, Sm15431, Yb17136 (C)
+    "Sm1523", # Sm152: Nd15011, Sm1523 (C), Tm1699
+    "Nd1436", # Nd143: Bi20934, Nd1436 (C), Nd14628
+    "Ho1655"))  |> # Ho165: Dy16213, Ho1655 (C), Nd14315 )
+   # IMPORTANT II: Remove open channels. 
+   # Glucagon: Gd156; SST: 139; NKX6-1: Tm169; INS: Pr141; Proinsulin: Sm154
+   # Estimate these on uncompressed data.
+  filter(!spot_id %in% 
+     c("Nd14628", # Pr141: INS
+      "Tm1699", # Sm154: Proinsulin
+      "Yb17422", # Gd156: GCG 
+      "Yb1732", # La139: SST
+      "Sm15431" # Tm	169
+    ))
 
-## 
+## Join corrected metal names.
 total <- total |> 
   inner_join(results, by = "spot_id") |> 
-  mutate(spot_id = metal) |> 
-  select(-metal)
+  # Now we know which metal 
+  select(-spot_id)
 ```
 
 Create one `SingleCellExperiment` object containing the spillover measurements 
@@ -193,7 +231,7 @@ sce <- SingleCellExperiment(assays = list(counts = t(all_counts)))
 
 colData(sce) <- DataFrame(total[,(nrow(panel)+1), drop=FALSE])
 rowData(sce)$sample_mass <- as.numeric(gsub("\\D", "", rownames(sce)))
-colData(sce)$sample_mass <- as.numeric(gsub("\\D", "", sce$spot_id))
+colData(sce)$sample_mass <- as.numeric(gsub("\\D", "", sce$metal))
 rowData(sce)$channel_name <- paste0(rownames(sce), "Di")
 assay(sce, "exprs") <- asinh(counts(sce)/5)
 ```
@@ -213,31 +251,10 @@ wrong metal isotope was spotted on the spillover compensation slide.
 ## Spillover heatmaps
 
 ```{r spillcomp-heatmaps, fig.height=7, fig.width=7}
-plotSpotHeatmap(sce, spot_id = "spot_id", statistic = "mean", cluster_rows = FALSE, cluster_cols= FALSE, 
+plotSpotHeatmap(sce, spot_id = "metal", statistic = "mean", cluster_rows = FALSE, cluster_cols= FALSE, 
   order_metals = TRUE)
 
-plotSpotHeatmap(sce, spot_id = "spot_id", log = FALSE, threshold = 100)
-
-
-
-# Log10 median pixel counts per spot and channels
-
-plot_list <- purrr::map(spillcomp, plotSpotHeatmap)
-
-purrr::map2(plot_list, batches, \(plot_x, batch) {
-  fn <- paste0(paste("Spillover", batch,
-                     sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, plot_x), plotsave_param))
-})
-
-# Thresholded on 200 pixel counts
-plot_list <- purrr::map(spillcomp, \(x) plotSpotHeatmap(x, log = FALSE, threshold = 200))
-
-purrr::map2(plot_list, batches, \(plot_x, batch) {
-  fn <- paste0(paste("Spillover", batch, "Thresholded",
-                     sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, plot_x), plotsave_param))
-})
+plotSpotHeatmap(sce, spot_id = "metal", log = FALSE, threshold = 100)
 ```
 
 
@@ -249,38 +266,20 @@ estimation. No signal should be observed off the diagonal on the thresholded
 heatmap. If that is the case, reduce the bin size.
 
 ```{r binning, fig.height=7, fig.width=7}
-# Define grouping size
-bin_size <- list("Batch1" = 3, "Batch2" = 15,
-                 "Batch3" = 4, "Batch4" = 3)
-
 # Pixel binning
-spillcomp_bin <- future_map2(spillcomp, bin_size, binAcrossPixels, .options = furrr_options(seed = seed))
+bin_size <- 20
 
-# Transform pixel counts by arcsinh() with a co-factor of 5
-spillcomp_bin <- purrr::map(spillcomp_bin, \(x) {
-  assay(x, "exprs") <- asinh(counts(x)/5)
-  return(x)
-})
+sce <- binAcrossPixels(sce, spot_id = "metal", bin_size = bin_size)
+assay(sce, "exprs") <- asinh(counts(sce)/5)
 
-# Plot log10 median counts heatmaps
-plot_list <- purrr::map(spillcomp_bin, plotSpotHeatmap)
-purrr::pmap(list(plot_list, batches, bin_size), \(plot_x, batch, bin) {
-  fn <- paste0(paste("Spillover", batch,
-                     paste0("Bin", bin), sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, plot_x), plotsave_param))
-})
+## Plot binned heatmaps.
+plotSpotHeatmap(sce, spot_id = "metal", statistic = "mean", cluster_rows = FALSE, cluster_cols= FALSE, 
+  order_metals = TRUE, assay_type = "counts")
 
-# Plot thresholded counts heatmaps
-plot_list <- purrr::map(spillcomp_bin, 
-                        \(x) plotSpotHeatmap(x, log = FALSE, threshold = 200))
-
-purrr::pmap(list(plot_list, batches, bin_size), \(plot_x, batch, bin) {
-  fn <- paste0(paste("Spillover", batch, "Thresholded",
-                     paste0("Bin", bin), sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, plot_x), plotsave_param))
-})
+## Binned + Thresholded heatmaps:
+plotSpotHeatmap(sce, spot_id = "metal", log = FALSE, threshold = 200, 
+  cluster_rows = FALSE, cluster_cols= FALSE, order_metals = TRUE, assay_type = "counts")
 ```
-
 
 ## Filter pixels
 
@@ -295,44 +294,32 @@ prior to spillover estimation:
 positive and negative pixel sets.  
 3. Apply the estimated cutoffs to identify truly positive pixels.  
 
-```{r debarcoding}
-spillcomp_bin <- purrr::map(spillcomp_bin, \(x) {
-  bc_key <- as.numeric(unique(x$sample_mass))
-  bc_key <- bc_key[order(bc_key)]
-  
-  x <- CATALYST::assignPrelim(x, bc_key = bc_key, verbose = FALSE)
-  x <- x[rowData(x)$is_bc, ]
-  x <- CATALYST::estCutoffs(x)
-  x <- CATALYST::applyCutoffs(x)}, .progress = TRUE
-)
+```{r}
+# Get correct key.
+bc_key <- as.numeric(unique(sce$sample_mass))
+bc_key <- bc_key[order(bc_key)]
+
+sce <- assignPrelim(sce, bc_key = bc_key)
+sce <- estCutoffs(sce)
+sce <- applyCutoffs(sce)
+
+cur_table <- table(sce$bc_id, sce$sample_mass)
+cur_table
 ```
 
-The updated SPE objects now contains a `bc_id` entry which indicates, for each 
-pixel, the assigned mass (e.g. `161`) or `0`, meaning unassigned. 
+```{r}
+library(pheatmap)
+cur_table <- table(sce$bc_id, sce$sample_mass)
 
-```{r assignment-heatmap, fig.width=7, fig.height=7}
-plot_list <- purrr::map(spillcomp_bin, \(x) {
-  cur_table <- table(x$bc_id, x$sample_mass)
-  
-  pheatmap(log10(cur_table + 1),
-           cluster_rows = FALSE, cluster_cols = FALSE)
-})
-
-purrr::map2(plot_list, batches, \(plot_x, batch) {
-  fn <- paste0(paste("Pixel", "Assignment", batch,
-                     sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, plot_x), plotsave_param))
-})
+# Visualize the correctly and incorrectly assigned pixels
+pheatmap(log10(cur_table + 1),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE)
+        
+# Compute the fraction of unassigned pixels per spot
+cur_table["0",] / colSums(cur_table)
 ```
 
-### Pixel filtering 
-
-Incorrectly assigned pixels and small pixel sets are filtered out.
-
-```{r pixel-filtering}
-spillcomp_bin <- purrr::map(spillcomp_bin, \(x) filterPixels(x, 
-                            minevents = 40, correct_pixels = TRUE))
-```
 
 # **Compute spillover matrix**
 
@@ -342,209 +329,62 @@ Functions from the [CATALYST package](https://bioconductor.org/packages/release/
 used to compute the spillover matrix and visualize it. 
 
 ```{r compute-spillover, fig.width=7, fig.height=7}
-spillcomp_bin <- purrr::map(spillcomp_bin, computeSpillmat)
+sce <- computeSpillmat(sce)
 
 isotope_list <- CATALYST::isotope_list
-plot_list <- purrr::map(spillcomp_bin, \(x) plotSpillmat(x, isotope_list = isotope_list))
+isotope_list$Ar <- 80
 
-purrr::map2(plot_list, batches, \(plot_x, batch) {
-  print(plot_x)
-  fn <- paste0(paste("Spillover", "Matrix", batch,
-                     sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, plot_x), plotsave_param))
-})
+plotSpillmat(sce, isotope_list = isotope_list)
 ```
 
-## Save spillover matrix
+Save Spillover matrix in the metadata of the SCE object + as external csv.
+```{r}
+# Save spillover matrix in variable
+sm <- metadata(sce)$spillover_matrix
 
-```{r save-spillmat}
-purrr::map2(spillcomp_bin, batches, \(x, batch) {
-  spillmat <- metadata(x)$spillover_matrix
-  fn_spillmat <- paste0(paste("spillmat", paths$panel_type, batch,
-                              sep = "_"), ".csv")
-  write.csv(spillmat, file.path(folder_spillcomp, fn_spillmat))
-})
-```
-
-# **Single-cell data compensation**
-
-## Calculate corrected counts
-
-Here, the `CATALYST` package is used to apply spillover compensation to the 
-single cell mean intensities. Note: this takes considerable time. Around 30-40 min.
-
-```{r single-cell-compensation}
-if (!("raw" %in% assayNames(spe))) {
-  
-  spe_comp <- vector(mode = "list", length = length(batches))
-  names(spe_comp) <- batches
-  
-  # Split the SPE object by batch
-  for (i in seq_along(batches)) {
-    spe_comp[[i]] <- spe[, spe$batch == i]
-    metadata(spe_comp[[i]]) <- list(
-      spillover_matrix = metadata(spillcomp_bin[[i]])$spillover_matrix)
-  }
-  
-  # Apply spillover compensation per batch. This takes considerable time.
-  spe_comp <- purrr::map(spe_comp, function(x) {
-    rowData(x)$channel_name <- paste0(rowData(x)$metal, "Di")
-    spillmat <- metadata(x)$spillover_matrix
-    
-    x <- CATALYST::compCytof(x, spillmat, transform = FALSE, cofactor = 1,
-                             isotope_list = isotope_list, overwrite = FALSE)
-  }, .progress = TRUE)
-
-  # Merge the SPE objects
-  spe_comp <- do.call(cbind, spe_comp)
-  
-  # Extract compensated counts
-  comp_counts <- assay(spe_comp, "compcounts")
-  
-  remove(spillcomp, spillcomp_bin, spe_comp)
-  gc()
-}
-```
-
-## Replace counts by compensated counts in the SPE object
-
-The original counts are stored as "raw" for comparison.
-```{r overwrite-assay}
-if (!("raw" %in% assayNames(spe))) {
-  
-  # Re-order the row and columns of the spillover-compensated SPE object
-  comp_counts <- comp_counts[, order(match(colnames(comp_counts), colnames(spe)))]
-  comp_counts <- comp_counts[order(match(rownames(comp_counts), rownames(spe))), ]
-  
-  # Store original counts as "raw" and compensated counts as "counts"
-  if (identical(colnames(spe), colnames(comp_counts)) &&
-      identical(rownames(spe), rownames(comp_counts))) {
-    assay(spe, "raw") <- assay(spe, "counts")
-    assay(spe, "counts") <- comp_counts
-  }
-  
-  remove(comp_counts)
-  gc()
-}
+write.csv(sm, "sm_unc.csv")
 ```
 
 
-## Plot counts comparison
+# **Compute spillover matrix**
 
-### Select channels
+## Compute and plot spillover matrix
 
-Select a few channels that usually show high levels of crosstalk.
+Functions from the [CATALYST package](https://bioconductor.org/packages/release/bioc/html/CATALYST.html) are
+used to compute the spillover matrix and visualize it. 
 
-```{r select-channels}
-channel_sel <- rownames(rowData(spe)[
-  rowData(spe)$metal %in% c("La139", "Gd155", "Ce140", "Nd142", "In113", "In115"), ])
+```{r apply-spillover-compensation}
+# Apply spillover compensation per batch. This takes considerable time.
+rowData(spe)$channel_name <- paste0(rowData(spe)$metal, "Di")
+spillmat <- metadata(sce)$spillover_matrix
+metadata(spe)$spillover_matrix <- spillmat
+
+spe <- CATALYST::compCytof(spe, spillmat, transform = FALSE, cofactor = 1,
+                            isotope_list = isotope_list, overwrite = FALSE)
+
+# Extract compensated counts
+comp_counts <- assay(spe, "compcounts")
+
+# Overwrite the compensated counts
+assay(spe, "raw") <- assay(spe, "counts")
+assay(spe, "counts") <- comp_counts
+
+# Write to exprs:
+assay(spe, "exprs_pre") <- asinh(assay(spe, "raw")/5)
+assay(spe, "exprs") <- asinh(assay(spe, "counts")/5)
 ```
 
-### Subset the SPE object
+```{r}
+library(dittoSeq)
+library(patchwork)
+before <- dittoScatterPlot(spe, x.var = "CD4_ProINS", y.var = "CD31",
+                           assay.x = "exprs_pre", assay.y = "exprs") +
+    ggtitle("Before compensation")
 
-The SPE object is first subset to `nb_cells` per case for faster plotting.
-
-```{r subset-spe}
-# Cells per case
-nb_cells <- 500
-
-# Subset the SPE object (n cells per cases)
-cell_subset <- as.data.frame(cbind(rn = rownames(colData(spe)),
-                                   case_id = colData(spe)$case_id)) |>
-  group_by(case_id)  |>
-  sample_n(nb_cells) |>
-  pull(rn)
-
-# Subset the selected cells
-spe_sub <- spe[channel_sel, as.vector(cell_subset)]
-
-# Apply arcsinh transformation
-assay(spe_sub, "exprs_raw") <- asinh(assay(spe_sub, "raw") / 1)
-assay(spe_sub, "exprs_comp") <- asinh(assay(spe_sub, "counts") / 1)
-```
-
-### Plot counts comparison
-
-Plot counts before and after spillover correction.
-
-```{r visualize-compensation_SST_ATP5A}
-# Plot channels 1 and 2
-# Note: The SPE is subsetted to batch 4 only, as there was considerate spillover between 
-# La139 and Gd155 in batch 4. (Spillover = 20 %)
-
-spe_batch4 <- spe_sub[, spe_sub$batch == "4"]
-
-p1 <- dittoScatterPlot(spe_batch4, x.var = "SST", y.var = "ATP5A",
-                       assay.x = "exprs_raw", assay.y = "exprs_raw",
-                       size = 0.3) +
-  ggtitle("Before compensation")
-
-p2 <- dittoScatterPlot(spe_batch4,  x.var = "SST", y.var = "ATP5A",
-                       assay.x = "exprs_comp", assay.y = "exprs_comp",
-                       size = 0.3) +
-  ggtitle("After compensation")
-
-print(p1 + p2)
-fn <- paste0(paste("CorrectedCounts", "SST", "ATP5A", "batch4",
-                   sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p1 + p2), plotsave_param))
-
-#---------------------------------------------
-# As comparison batch 1 is plotted. Here, no major spillover was observed
-# between La139 and Gd155 (Spillover = 0.5 %).
-spe_batch1 <- spe_sub[, spe_sub$batch == "1"]
-
-p1 <- dittoScatterPlot(spe_batch1, x.var = "SST", y.var = "ATP5A",
-                       assay.x = "exprs_raw", assay.y = "exprs_raw",
-                       size = 0.3) +
-  ggtitle("Before compensation")
-
-p2 <- dittoScatterPlot(spe_batch1,  x.var = "SST", y.var = "ATP5A",
-                       assay.x = "exprs_comp", assay.y = "exprs_comp",
-                       size = 0.3) +
-  ggtitle("After compensation")
-
-print(p1 + p2)
-
-fn <- paste0(paste("CorrectedCounts", "SST", "ATP5A", "batch1",
-                   sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p1 + p2), plotsave_param))
-```
-
-```{r visualize-compensation}
-#---------------------------------------------
-# Plot channels 3 and 4
-p1 <- dittoScatterPlot(spe_sub, x.var = "H3", y.var = "SMA",
-                       assay.x = "exprs_raw", assay.y = "exprs_raw",
-                       size = 0.3) +
-  ggtitle("Before compensation")
-
-p2 <- dittoScatterPlot(spe_sub,  x.var = "H3", y.var = "SMA",
-                       assay.x = "exprs_comp", assay.y = "exprs_comp",
-                       size = 0.3) +
-  ggtitle("After compensation")
-
-print(p1 + p2)
-fn <- paste0(paste("CorrectedCounts", "H3", "SMA",
-                   sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p1 + p2), plotsave_param))
-
-#---------------------------------------------
-# Plot channels 5 and 6
-p1 <- dittoScatterPlot(spe_sub, x.var = "INS", y.var = "CD11b",
-                       assay.x = "exprs_raw", assay.y = "exprs_raw",
-                       size = 0.3) +
-  ggtitle("Before compensation")
-
-p2 <- dittoScatterPlot(spe_sub, x.var = "INS", y.var = "CD11b",
-                       assay.x = "exprs_comp", assay.y = "exprs_comp",
-                       size = 0.3) +
-  ggtitle("After compensation")
-
-print(p1 + p2)
-fn <- paste0(paste("CorrectedCounts", "INS", "CD11b",
-                   sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p1 + p2), plotsave_param))
+after <- dittoScatterPlot(spe, x.var = "CD4_ProINS", y.var = "CD31",
+                          assay.x = "exprs", assay.y = "exprs") +
+    ggtitle("After compensation")
+before + after
 ```
 
 # **Save the updated SPE object**
@@ -555,5 +395,6 @@ deleted in the next script.
 
 ```{r save-spe}
 fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
+print(spe)
 saveRDS(spe, fn_spe)
 ```

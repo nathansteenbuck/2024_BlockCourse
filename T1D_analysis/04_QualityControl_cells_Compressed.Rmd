@@ -28,6 +28,10 @@ knitr::opts_chunk$set(echo = TRUE)
 paths$prev <- paste("03_TransformCorrect", paths$object_type, paths$panel_type, sep = "_")
 ```
 
+You can run this script as: 
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/04_QualityControl_cells_Compressed.Rmd')"
+
+
 ## **Goals**  
   
 Perform quality controls on cell-level data.   
@@ -457,120 +461,8 @@ writeLines(c("Selected images:", image_list))
 ```
 
 
-## Load images
-
-Load full image stacks and cell masks as `CytoImageList` objects.
-
-```{r load-images}
-# Load multichannel images
-images <- imgloader(
-  x = spe,
-  image_dir = folder_images,
-  image_names = image_list,
-  type = "stacks"
-)
-
-# Load cell masks
-masks <- imgloader(
-  x = spe,
-  image_dir = folder_masks,
-  image_names = mask_list,
-  as.is = TRUE,
-  # bit.depth = ,
-  type = "masks"
-)
-
-if (length(setdiff(mcols(images)$ImageName,
-                   mcols(masks)$ImageName)) != 0) {
-  print("mcols(images)$ImageName and mcols(masks)$ImageName
-        should have the same values")
-}
-
-# Subset the SPE object
-spe_sub <- spe[, spe$image_fullname %in% image_list]
-spe_sub$ImageName <- gsub(image_extension, "", spe_sub$image_fullname)
-```
-
-Inspect the images.
-```{r display-images}
-library(cytoviewer)
-app <- cytoviewer(image = images, 
-                  mask = masks, 
-                  object = spe_sub,
-                  cell_id = "cell_number", 
-                  img_id = "ImageName")
-
-if (interactive()) {
-    shiny::runApp(app)
-}
-```
 
 Q: What can you observe in the images?
-
-
-## Image-level quality control
-
-Image-level quality control is often performed using tools that offer a graphical user interface such as QuPath, FIJI and the previously mentioned cytoviewer package. Viewers that were specifically developed for IMC data can be seen here. In this section, we will specifically focus on quantitative metrics to assess image quality.
-
-It is often of interest to calculate the signal-to-noise ratio (SNR) for individual channels and markers. Here, we define the SNR as:
-
-*SNR=Is/In*
-
-where *Is* is the intensity of the signal (mean intensity of pixels with true signal) 
-and *In* is the intensity of the noise (mean intensity of pixels containing noise). 
-This definition of the SNR is just one of many and other measures can be applied. 
-Finding a threshold that separates pixels containing signal and pixels containing noise is not trivial and different approaches can be chosen. Here, we use the otsu thresholding approach to find pixels of the “foreground” (i.e., signal) and “background” (i.e., noise). The SNR is then defined as the mean intensity of foreground pixels divided by the mean intensity of background pixels. We compute this measure as well as the mean signal intensity per image. 
-The plot below shows the average SNR versus the average signal intensity across all images.
-
-Note 1: The SNR is calculated on the pixel level and not on the cell level.
-Note 2: The fitting can fail on the image-level, which produces Infinity values.
-```{r snr-images}
-library(tidyverse)
-library(ggrepel)
-library(EBImage)
-
-cur_snr <- lapply(names(images), function(x){
-    img <- images[[x]]
-    mat <- apply(img, 3, function(ch){
-        # Otsu threshold
-        thres <- otsu(ch, range = c(min(ch), max(ch)), levels = 65536)
-        # Signal-to-noise ratio
-        snr <- mean(ch[ch > thres]) / mean(ch[ch <= thres])
-        # Signal intensity
-        ps <- mean(ch[ch > thres])
-        
-        return(c(snr = snr, ps = ps))
-    })
-    t(mat) %>% as.data.frame() %>% 
-        mutate(image = x,
-               marker = colnames(mat)) %>% 
-        pivot_longer(cols = c(snr, ps))
-})
-
-cur_snr <- do.call(rbind, cur_snr)
-
-p <- cur_snr %>% 
-    group_by(marker, name) %>%
-    summarize(log_mean = log2(mean(value))) %>%
-    pivot_wider(names_from = name, values_from = log_mean) %>%
-    ggplot() +
-    geom_point(aes(ps, snr)) +
-    geom_label_repel(aes(ps, snr, label = marker)) +
-    mytheme$standard()+  
-    ylab("Signal-to-noise ratio [log2]") +
-    xlab("Signal intensity [log2]")
-print(p)
-fn <- paste0(paste(today, "SNRvsSignalIntensity", sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p), plotsave_param))
-```
-
-## Cell-level quality control
-
-In the following paragraphs we will look at different metrics and visualization approaches to assess data quality (as well as biological differences) on the single-cell level.
-
-Related to the signal-to-noise ratio (SNR) calculated above on the pixel-level, a similar measure can be derived on the single-cell level. Here, we will use a two component Gaussian mixture model for each marker to find cells with positive and negative expression. The SNR is defined as:
-
-**SNR=Is/In**
 
 where *Is* is the intensity of the signal (mean intensity of cells with positive signal) 
 and *In* is the intensity of the noise (mean intensity of cells lacking expression). 
@@ -641,11 +533,12 @@ dimred_sel <- c("UMAP")
 writeLines(c("Dimensionality reduction:", dimred_sel))
 
 # Select the assay(s) of interest
-assay_sel <- c("scaled", "exprs")
+assay_sel <- c("scaled", "exprs", "fastMNN_case_id")
 writeLines(c("\nAssays:", assay_sel[assay_sel %in% assayNames(spe)]))
 
 # Select the channels
-channels_dimred <- rowData(spe)[rowData(spe)$dimred == 1, ]$shortname
+# channels_dimred <- rowData(spe)[rowData(spe)$dimred == 1, ]$shortname
+channels_dimred <- rownames(spe)[!(grepl("DNA|H3", rownames(spe)))]
 cat(c("Channels:", channels_dimred[channels_dimred %in% rownames(spe)]))
 cat(c("\nNumber of channels:", length(channels_dimred)))
 
@@ -655,31 +548,14 @@ names(plot_variables) <- c("donor_type", "case_id")
 writeLines("\nVariables to plot:")
 print(plot_variables)
 
+# Subset the SPE object
+spe_sub <- spe[channels_dimred, metadata(spe)[["subset"]]]
+cells_not_subset <- colnames(spe)[! colnames(spe) %in% metadata(spe)$subset]
+
 # Select Channels we will do our Category assignment on.
 channels_cat <- c("SYP", "AMY", "KRT19", 
                   "CD45", "MPO", "CD68", 
                   "SMA", "CD31")
-```
-
-```{r subset-spe2}
-set.seed(222)
-if (!("subset" %in% names(metadata(spe)))) {
-  # Cells per case
-  nb_cells <- 7500
-  
-  # Subset the SPE object (nb_cells per case)
-  cell_subset <- tibble(rn = rownames(colData(spe)),
-                        case_id = colData(spe)$case_id) |> 
-    group_by(case_id) |>
-    sample_n(nb_cells) |> 
-    pull(rn)
-  
-  # Keep the subset cell ids in SPE metadata
-  metadata(spe)[["subset"]] <- sort(as.vector(cell_subset))
-}
-# Subset the SPE object
-spe_sub <- spe[channels_dimred, metadata(spe)[["subset"]]]
-spe_cat <- spe[channels_cat, metadata(spe)[["subset"]]]
 ```
 
 
@@ -695,16 +571,19 @@ see publication.
 
 ```{r run-UMAP}
 # Save as variable and write assays to NULL. Reduces memory overhead for parallelization. 
-# Add UMAPs to SPE object
-results <- purrr::map(assay_sel, \(cur_assay) {
-  dimred_name <- paste("UMAP", cur_assay, sep = "_")
-  print(dimred_name)
+colnames_spe <- colnames(spe)
+dimred_name <- "UMAP"
+dimred_sel <- "UMAP"
 
-  # Run UMAP on a cell subset
-  if ((!dimred_name %in% reducedDimNames(spe_sub)) && ("UMAP" %in% dimred_sel)) {
+# Run UMAP on a cell subset
+
+purrr::map(assay_sel, \(cur_assay) {
+  message("Running UMAP for assay: ", cur_assay)
+  # Extract
+  if ((!dimred_name %in% reducedDimNames(spe)) && ("UMAP" %in% dimred_sel)) {
     # Extract Counts. 
-    if (cur_assay %in% assayNames(spe_sub)) {
-      counts <- t(assay(spe_sub, cur_assay))
+    if (cur_assay %in% assayNames(spe)) {
+      counts <- t(assay(spe, cur_assay))
     }
     # Run UMAP.
     umap_model <- uwot::umap(counts, ret_model = TRUE)
@@ -712,48 +591,11 @@ results <- purrr::map(assay_sel, \(cur_assay) {
     cur_umap <- umap_model$embedding
     colnames(cur_umap) <- c("UMAP1", "UMAP2")
     rownames(cur_umap) <- rownames(counts)
-    cur_umap
   }
+  reduceddim_name <- paste("UMAP", cur_assay, sep = "_")
+
+  reducedDim(spe, reduceddim_name) <<- cur_umap
 })
-
-## Add UMAPs to SPE object
-dimred_name1 <- paste("UMAP", assay_sel[1], sep = "_")
-dimred_name2 <- paste("UMAP", assay_sel[2], sep = "_")
-
-reducedDim(spe_sub, dimred_name1) <- results[[1]]
-reducedDim(spe_sub, dimred_name2) <- results[[2]]
-```
-
-## Run UMAP for Categories.
-
-```{r run-UMAP-cat}
-# Add UMAPs to SPE object
-results <- purrr::map(assay_sel, \(cur_assay) {
-  dimred_name <- paste("UMAP", cur_assay, sep = "_")
-  print(dimred_name)
-
-  # Run UMAP on a cell subset
-  if ((!dimred_name %in% reducedDimNames(spe_cat)) && ("UMAP" %in% dimred_sel)) {
-    # Extract Counts. 
-    if (cur_assay %in% assayNames(spe_cat)) {
-      counts <- t(assay(spe_cat, cur_assay))
-    }
-    # Run UMAP.
-    umap_model <- uwot::umap(counts, ret_model = TRUE)
-    # Extract Embedding.
-    cur_umap <- umap_model$embedding
-    colnames(cur_umap) <- c("UMAP1", "UMAP2")
-    rownames(cur_umap) <- rownames(counts)
-    cur_umap
-  }
-})
-
-## Add UMAPs to SPE object
-dimred_name1 <- paste("UMAP", assay_sel[1], "cat", sep = "_")
-dimred_name2 <- paste("UMAP", assay_sel[2], "cat", sep = "_")
-
-reducedDim(spe_cat, dimred_name1) <- results[[1]]
-reducedDim(spe_cat, dimred_name2) <- results[[2]]
 ```
 
 ## Plot reduced dimensions
@@ -764,22 +606,23 @@ Plot selected variables on reduced dimensions.
 
 ```{r plot-dimred, fig.width=15, fig.height=10}
 # Prepare the data
-cur_dat <- makePerCellDF(spe_sub) |>
+cur_dat <- makePerCellDF(spe) |>
   dplyr::mutate(case_id = factor(case_id, levels = cases),
                 donor_type = factor(donor_type, levels = stages)) |>
   dplyr::arrange(case_id, donor_type)
 
 cur_dimred <- "UMAP"
-cur_assay <- "exprs"
 # Plot variables
-purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
-  dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
-  message(dimred_name)
-  p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
-                    size = 0.5, palette = palettes[[cur_var]])
-  print(p)
-  fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
-  do.call(ggsave, c(list(fn, p), plotsave_param))
+purrr::map(assay_sel, \(cur_assay) {
+  purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
+    dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
+    message(dimred_name)
+    p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
+                      size = 0.5, palette = palettes[[cur_var]])
+    
+    fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
+    do.call(ggsave, c(list(fn, p), plotsave_param))
+  })
 })
 ```
 
@@ -791,31 +634,35 @@ If so, what does that mean?
 ### Plot marker expression
 
 ```{r plot-dimred-channels, fig.height=10, fig.width=15}
-# Subset the SPE object
-cur_assay <- "exprs"
 # Plot marker expression
-dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
-
+cur_dimred <- "UMAP"
+purrr::map(assay_sel, \(cur_assay) {
 # Prepare the data
-if (cur_assay %in% assayNames(spe_sub)) {
-  cur_dat <- scuttle::makePerCellDF(spe_sub, features = channels_dimred,
-                                    exprs_values = cur_assay) |>
-                dplyr::select(c(all_of(channels_dimred), paste0(dimred_name, ".1"), 
+  dimred_name <- paste(cur_dimred, cur_assay, sep = "_")
+  if (cur_assay %in% assayNames(spe)) {
+    cur_dat <- scuttle::makePerCellDF(spe, features = channels,
+                                      exprs_values = cur_assay) |>
+                dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
                                                   paste0(dimred_name, ".2")))
-}
+    } else {
+      cur_dat <- scuttle::makePerCellDF(spe, features = channels,
+                                        exprs_values = "exprs") |>
+        dplyr::select(c(all_of(channels), paste0(dimred_name, ".1"), 
+                                          paste0(dimred_name, ".2")))
+    }
 
-cur_dat <- cur_dat |>
-    tidyr::pivot_longer(cols = all_of(channels_dimred),
-                        names_to = "channel",
-                        values_to = cur_assay)
-  
-  # Plot marker expression
-p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
-                              channels_dimred, force_points = TRUE)
-print(p)
-fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
-do.call(ggsave, c(list(fn, p), plotsave_param_large))
+    cur_dat <- cur_dat |>
+      tidyr::pivot_longer(cols = all_of(channels),
+                          names_to = "channel",
+                          values_to = cur_assay)
 
+    # Plot marker expression
+    p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
+                                channels, force_points = TRUE)
+
+    fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
+    do.call(ggsave, c(list(fn, p), plotsave_param_large))
+})
 ```
 
 ## UMAP for Categories
@@ -824,7 +671,47 @@ do.call(ggsave, c(list(fn, p), plotsave_param_large))
 
 Plot selected variables on reduced dimensions.
 
-```{r plot-dimred, fig.width=15, fig.height=10}
+Generate spe-cat object.
+
+```{r}
+# Select Channels we will do our Category assignment on.
+channels_cat <- c("SYP", "AMY", "CK19", 
+                  "CD45RA", "CD45RO", "MPO", "CD68", 
+                  "SMA", "CD31")
+spe_cat <- spe[channels_cat, ]
+```
+
+Run UMAP on the `spe_cat` object.
+```{r run-UMAP-cat}
+# Save as variable and write assays to NULL. Reduces memory overhead for parallelization. 
+colnames_spe <- colnames(spe)
+dimred_name <- "UMAP"
+dimred_sel <- "UMAP"
+
+# Run UMAP on a cell subset
+
+purrr::map(assay_sel, \(cur_assay) {
+  message("Running UMAP for assay: ", cur_assay)
+  # Extract
+  if ((!dimred_name %in% reducedDimNames(spe_cat)) && ("UMAP" %in% dimred_sel)) {
+    # Extract Counts. 
+    if (cur_assay %in% assayNames(spe_cat)) {
+      counts <- t(assay(spe_cat, cur_assay))
+    }
+    # Run UMAP.
+    umap_model <- uwot::umap(counts, ret_model = TRUE)
+    # Extract Embedding.
+    cur_umap <- umap_model$embedding
+    colnames(cur_umap) <- c("UMAP1", "UMAP2")
+    rownames(cur_umap) <- rownames(counts)
+  }
+  reduceddim_name <- paste("UMAP", cur_assay, "cat", sep = "_")
+
+  reducedDim(spe_cat, reduceddim_name) <<- cur_umap
+})
+```
+
+```{r plot-dimred-cat, fig.width=15, fig.height=10}
 # Prepare the data
 cur_dat <- makePerCellDF(spe_cat) |>
   dplyr::mutate(case_id = factor(case_id, levels = cases),
@@ -847,7 +734,7 @@ purrr::iwalk(plot_variables, \(cur_var, name_cur_var) {
 ### Plot marker expression
 On reduced set of markers.
 
-```{r plot-dimred-channels, fig.height=10, fig.width=15}
+```{r plot-dimred-channels2, fig.height=10, fig.width=15}
 cur_dimred <- "UMAP"
 cur_assay <- "exprs"
 # Plot marker expression
@@ -871,3 +758,5 @@ p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
 fn <- paste0(paste(today, dimred_name, "Channels", "cat", sep = "_"), ".png")
 do.call(ggsave, c(list(fn, p), plotsave_param_large))
 ```
+
+-> Q: 

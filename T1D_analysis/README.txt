@@ -15,10 +15,8 @@ These are:
 
 
 Major to dos:
-- Simplify (esp. 02 & 04)
-- Adjust paths for SPE saving -> save into same container (space)
-- Adjust paths also in Region Selection scripts -> Uncompressed/Compressed.
-- Adjust helper.R
-- 01 - remove stuff for graphs.
 - 05/06 difference in channels used.
+- Future: redo 06_decompression.
 
+Experimental:
+- AMY expression & CD3 secondary.

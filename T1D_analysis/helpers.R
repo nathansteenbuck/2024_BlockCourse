@@ -97,7 +97,7 @@ palettes <- list(
   ),
 
   cases = c(
-    "6227" = "#ff996c", 
+    "6271" = "#ff996c", 
     "6238" = "#3D8D96",
     "6396" = "#5e4395",
     "6399" = "#E31A1C"
@@ -497,9 +497,12 @@ imgloader <- function(x, image_dir, image_names,
 
     # Add channel names
     if (type == "stacks") {
-      channelNames(images) <- rownames(x)
+      print("Loading image stacks")
+      channelNames(images) <- c(rownames(x)[1:30], "DNA3", "PPY")
+      setChannels(images, "DNA3") <- NULL
     }
 
     return(images)
   }
 }
+

@@ -26,8 +26,6 @@ paths$prev <- paste("04_QualityControl", paths$object_type, paths$panel_type, se
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-
 # **Goal**
 
 In the following scripts, cell types are attributed to all cells in the dataset
@@ -78,13 +76,6 @@ Load the SpatialExperiment (SPE) object saved at the previous step.
 fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel_type, ".rds"))
 spe <- readRDS(fn_spe)
 print(spe)
-```
-
-
-```{r convert-to-sce}
-# Remove 6399.
-spe <- spe[, colData(spe)$case_id != "6399"]
-
 ```
 
 # **Clustering**
@@ -299,6 +290,9 @@ clust_freq <- table(colData(sce)[[clust_name]])
 clust_freq
 ```
 
+Rare Clusters: 12, 24, 21, 22 (all below 200).
+
+
 ## Visualize clusters with cytomapper and cytoviewer
 
 Here, we use the `cytoviewer` package to visualize the clusters on the images.
@@ -309,7 +303,8 @@ Additional information we can use is their spatial localization of cell types, i
 ### Select cluster(s) and assay to show
 
 ```{r viz-clust-select}
-viz_clust <- c(4, 5, 14) # Select cluster(s) to visualize.
+# viz_clust <- c(26, 23, 12) # Select cluster(s) to visualize.
+viz_clust <- c(4, 13, 10, 23, 25)
 viz_method <- "Pheno1"
 viz_assay <- "scaled"
 ```
@@ -377,8 +372,6 @@ if (!is.null(viz_clust)) {
 }
 ```
 
-
-
 # **Attribute cell categories**
 
 **Note: this section requires manual intervention**
@@ -399,56 +392,36 @@ Depending on the clustering, maybe select other categories.
 clust_methods <- c("Pheno1")
 clust_assay <- c("scaled")
 
-if (!clust_assay %in% assay_sel)
-  stop("The selected assay is not in the assays selected for clustering")
-if (length(clust_assay) != 1)
-  stop("Select only one assay")
+if (!clust_assay %in% assay_sel) stop("The selected assay is not in the assays selected for clustering")
+if (length(clust_assay) != 1) ("Select only one assay")
 
 clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
 # Islet:
-clust_beta <- c(20, 24) # 24
-clust_alpha <- c(23, 15, 18)
-clust_delta <- c(17)
-clust_gamma <- c(22)
-clust_islet_other <- c()
+clust_beta <- c(15, 14) # 
+clust_alpha <- c(16, 24)
+clust_delta <- c(18)
+clust_gamma <- c(12)
+clust_islet_other <- c(13) # 
 
 # Immune:
-clust_t <- c(10)
-clust_neutrophil <- c(7)
-clust_myeloid <- c(6)
+clust_t <- c(11)
+clust_neutrophil <- c(22)
+clust_myeloid <- c(20)
 
-# Exocrine Cells.
-clust_endothelial <- c(1)
-clust_ductal <- c(4, 16, 21)
-clust_mesenchymal <- c()
-clust_other <- c(9, 12, 13, 14, 19)
-clust_acinar <- c(2,3, 5, 8, 11)
+# Exocrine Cells + Stromal.
+clust_endothelial <- c(7)
+clust_mesenchymal <- c(21)
 
-# Define which clusters correspond to which cell types
-#clust_alpha <- c(23, 15)
-#clust_beta  <- c(19)
-#clust_delta <- c(17)
-#clust_gamma <- c(22)
-#clust_islet_other <- c(24)
+clust_ductal <- c(9, 1, 17, 19)
+clust_acinar <- c(26, 2:6, 8)
+clust_other <- c(10, 23, 25)
 
-# Immune cells.
-#clust_t <- c(10)
-#clust_myeloid <- c(6) # CD68
-#clust_neutrophil <- c(7) # MPO?
-
-# Exocrine Cells.
-#clust_ductal <- c(16, 20)
-#clust_acinar <- c(3, 5, 12, 4, 14, 11, 2, 8)
-#clust_endothelial <- c(1) #CD31
-#clust_mesenchymal <- c(13)
-#clust_other <- c(9, 18, 21) # 
-
-all_clust <- sort(c(clust_alpha, clust_beta, clust_delta, clust_gamma,
-                    clust_t, clust_myeloid, clust_neutrophil,
-                    clust_ductal, clust_acinar, clust_endothelial, 
-                    clust_other, clust_mesenchymal, clust_islet_other))
+all_clust <- sort(c(clust_alpha, clust_beta, clust_delta, clust_gamma, clust_islet_other,
+                    clust_t,  clust_neutrophil, clust_myeloid,
+                    clust_endothelial, clust_mesenchymal, 
+                    clust_ductal, clust_acinar, clust_other))
 
 if ((!length(unique(all_clust)) ==
      length(unique(colData(sce)[, clust_name]))) ||
@@ -569,11 +542,6 @@ heatmaply::normalize(hm), main = clust_name,
 file = file.path(paths$folder_script, fn))
 ```
 
-
-- CD3 signal
-- Mesenchymal cells (SMA)
-
-- FoxP3, CD45RA signal Delta
 
 ### Number of cells by cell category
 
