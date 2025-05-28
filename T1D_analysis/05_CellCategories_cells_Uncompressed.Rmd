@@ -340,7 +340,7 @@ Additional information we can use is their spatial localization of cell types, i
 
 ```{r viz-clust-select}
 # viz_clust <- c(26, 23, 12) # Select cluster(s) to visualize.
-viz_clust <- c(4, 13, 10, 23, 25)
+viz_clust <- NULL
 viz_method <- "Pheno1"
 viz_assay <- "scaled"
 ```

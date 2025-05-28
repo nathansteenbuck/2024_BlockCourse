@@ -26,6 +26,7 @@ paths$prev <- paste("04_QualityControl", paths$object_type, paths$panel_type, se
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/05_CellCategories_cells_Compressed.Rmd')"
 
 
 # **Goal**

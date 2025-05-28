@@ -26,7 +26,7 @@ paths$prev <- paste("05_CellCategories", paths$object_type, paths$panel_type, se
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/06_CellTypes_cells_Compressed.Rmd')"
 
 # **Goal**
 
@@ -1133,7 +1133,7 @@ sce_immune_3 <- sce_immune_2[channels_immune, ]
 
 ## **Clustering: PhenoGraph**
 
-```{r phenograph-run}
+```{r phenograph-run-immune}
 ## 
 clust_name <- paste(clust_method, cur_assay, sep = "_")
 writeLines(c("\n", clust_name))
@@ -1163,7 +1163,7 @@ clust_freq <- table(colData(sce_immune_3)[[clust_name]])
 clust_freq
 ```
 
-```{r heatmap-clusters-markers}
+```{r heatmap-clusters-markers-immune}
 cur_method <- "Pheno1"
 name_cur_assay <- "exprs"
 cur_assay <- "exprs"
@@ -1248,7 +1248,7 @@ colData(sce_immune_3) |>
 
 ### Select cluster(s) and assay to show
 
-```{r viz-clust-select}
+```{r viz-clust-select2}
 colData(sce_immune)$Pheno1_exprs <- sce_immune_3[, colnames(sce_immune)]$Pheno1_exprs
 
 viz_clust <- c(1:19) # Select cluster(s) to visualize.
@@ -1258,7 +1258,7 @@ viz_assay <- "exprs"
 
 ### Load images and masks
 
-```{r viz-cluster-load}
+```{r viz-cluster-load2}
 if (!is.null(viz_clust)) {
   nb_images <- 14
   image_extension <- ".tiff"
@@ -1301,7 +1301,7 @@ if (!is.null(viz_clust)) {
 
 ### Interactive with Cytoviewer
 
-```{r viz-cluster-cytoviewer}
+```{r viz-cluster-cytoviewer2}
 # Use cytoviewer with images, masks and object
 library(cytoviewer)
 if (!is.null(viz_clust)) {
@@ -1338,7 +1338,7 @@ sce_exo_3 <- sce_rest_2[channels_exo, ]
 
 ## **Clustering: PhenoGraph**
 
-```{r phenograph-run}
+```{r phenograph-run-exocrine}
 ## 
 clust_name <- paste(clust_method, cur_assay, sep = "_")
 writeLines(c("\n", clust_name))
@@ -1363,12 +1363,12 @@ if (!clust_name %in% colnames(colData(sce_exo_3))) {
 
 Quickly check cluster abundances.
 
-```{r clust-freq}
+```{r clust-freq2}
 clust_freq <- table(colData(sce_exo_3)[[clust_name]])
 clust_freq
 ```
 
-```{r heatmap-clusters-markers}
+```{r heatmap-clusters-markers3}
 cur_assay <- "exprs"
 clust_name <- paste(cur_method, cur_assay, sep = "_")
 message(clust_name)
@@ -1386,7 +1386,7 @@ heatmaply::heatmaply(
     file = file.path(paths$folder_script, fn))
 ```
 
-```{r cellcats-pheno-scaled}
+```{r cellcats-pheno-scaled2}
 sce_rest
 ```
 
@@ -1396,7 +1396,7 @@ Ductal: 31, 16, 11, 10, 8, 17
 Fibro_SM: 5, 19
 Endothelail: 18, 1
 
-```{r cellcats-pheno-scaled}
+```{r cellcats-pheno-scaled3}
 clust_methods <- c("Pheno1")
 clust_assay <- c("exprs")
 
