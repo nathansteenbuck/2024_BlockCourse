@@ -7,6 +7,7 @@ editor_options:
   chunk_output_type: inline
 ---
 
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/07_CellTypesComparison_cells_Compressed.Rmd')"
 
 # **Goal**
 
@@ -123,7 +124,8 @@ p <- df |>
   geom_bar(stat = "identity", position = "dodge") +
   mytheme$standard() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
-  facet_wrap(~cell_type, scales = "free_y")
+  facet_wrap(~cell_type, scales = "free_y") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 print(p)
 
 fn <- file.path(paths$folder_script, paste0(today, "_CellTypes_Comparison_Compressed_Uncompressed_Reduced", ".png"))
@@ -175,7 +177,7 @@ p <- cor_df |>
   #filter(cell_type != "Fibro_SM") |> 
   filter(cell_type != "Other") |>
   group_by(cell_type) |> 
-  summarise(cor = cor(Compressed, Uncompressed, method = "pearson")) |> 
+  summarise(cor = cor(Compressed, Uncompressed, method = "spearman")) |> 
   # Plot heatmap
   ggplot(aes(x = cell_type, y = "Correlation Cell Number per ROI", fill = cor)) +
   geom_tile(color = "white") +
@@ -207,3 +209,5 @@ cor_df <- df |>
 
 corrplot::corrplot(cor(cor_df[, -c(1:2)]), method = "color", type = "upper", tl.col = "black")
 ```
+
+Q: What could be other interesting comparisons?

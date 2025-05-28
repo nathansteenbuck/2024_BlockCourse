@@ -179,8 +179,8 @@ we can now write the following equations:
 
 ## Perform Channel Decomposition
 ```{r channels-un-compressed}
-channels_compressed <- c("CD44_GCG", "CD8a_INS", "CD4_ProINS", "CD3_NKX6_1", "CD20_SST")
-channels_uncompressed <- c("CD44", "GCG", "CD8a", "INS", "CD4", "ProINS", "CD3", "NKX6_1", "CD20", "SST")
+channels_compressed <- c("CD44_GCG", "CD8a_INS", "CD4_ProINS", "CD3e_NKX6_1", "CD20_SST")
+channels_uncompressed <- c("CD44", "GCG", "CD8a", "INS", "CD4", "ProINS", "CD3e", "NKX6_1", "CD20", "SST")
 ```
 
 Fit 2-component GMMs with unequal variance to each channel in each cell category 
@@ -202,7 +202,7 @@ coefficients <- map(channels_compressed, \(channel) {
   N_Immune_S_Islet <- mclust::densityMclust(data = assay(sce_isl, "exprs")[channel, ], G = 2, modelNames = "V")
   M_N_Immune_S_Islet <- N_Immune_S_Islet$parameters$mean[2]
   V_N_Immune_S_Islet <- N_Immune_S_Islet$parameters$variance$sigmasq[2]
-  threshold_Islet<- max(N_Immune_S_Islet$data[N_Immune_S_Islet$classification == 1,])
+  threshold_Islet <- max(N_Immune_S_Islet$data[N_Immune_S_Islet$classification == 1,])
 
   # Exocrine:
   N_Immune_N_Islet <- mclust::densityMclust(data = assay(sce_exo, "exprs")[channel, ], G = 2, modelNames = "V")
@@ -216,6 +216,7 @@ coefficients <- map(channels_compressed, \(channel) {
                     M_N_Immune_S_Islet, V_N_Immune_S_Islet, 
                     M_N_Immune_N_Islet, V_N_Immune_N_Islet,
                     threshold_Islet, threshold_Immune)
+
   names(coefficients) <- c("M_S_Immune_N_Islet", "V_S_Immune_N_Islet", 
                            "M_N_Immune_S_Islet", "V_N_Immune_S_Islet", 
                            "M_N_Immune_N_Islet", "V_N_Immune_N_Islet",
@@ -231,6 +232,8 @@ Inspect the coefficients.
 coefficients
 ```
 
+## Show CD8a_INS Distribution for Islet Cells:
+-> INS signal and CD8a noise.
 ```{r}
 N_Immune_S_Islet <- mclust::densityMclust(data = assay(sce_isl, "exprs")["CD8a_INS", ], G = 2, modelNames = "V")
 
@@ -241,12 +244,13 @@ p <- tibble(counts = assay(sce_isl, "exprs")["CD8a_INS", ]) |>
   mytheme$standard_new() + 
   geom_vline(xintercept = N_Immune_S_Islet$parameters$mean[2], color = "blue") + 
   geom_vline(xintercept = max(N_Immune_S_Islet$data[N_Immune_S_Islet$classification == 1,]), color = "orange")
-
+print(p)
 fn <- paste0(today, "_CD8a_INS_density_Islet.png")
-do.save(fn, p, width = 10, height = 10)
+ggsave(fn, p, width = 10, height = 10)
 ```
 
 Show CD8a_INS Distribution for Immune Cells:
+-> CD8a signal and INS noise.
 ```{r}
 N_Islet_N_Immune <- mclust::densityMclust(data = assay(sce_immune, "exprs")["CD8a_INS", ], G = 2, modelNames = "V")
 
@@ -259,7 +263,7 @@ p <- tibble(counts = assay(sce_immune, "exprs")["CD8a_INS", ]) |>
   geom_vline(xintercept = max(N_Islet_N_Immune$data[N_Islet_N_Immune$classification == 1,]), color = "orange")
 print(p)
 fn <- paste0(today, "_CD8a_INS_density_Immune.png")
-do.save(fn, p, width = 10, height = 10)
+ggsave(fn, p, width = 10, height = 10)
 ```
 
 Show CD8a_INS Distribution for Exocrine Cells:
@@ -275,7 +279,7 @@ p <- tibble(counts = assay(sce_exo, "exprs")["CD8a_INS", ]) |>
   geom_vline(xintercept = max(N_Islet_N_Immune$data[N_Islet_N_Immune$classification == 1,]), color = "orange")
 print(p)
 fn <- paste0(today, "_CD8a_INS_density_Immune.png")
-do.save(fn, p, width = 10, height = 10)
+ggsave(fn, p, width = 10, height = 10)
 ```
 
 ## Estimate coefficients of normal distributions (Noise + Signal)
@@ -283,17 +287,30 @@ Now, we will decompose the channels into their respective signals and noise comp
 Here, we estimate the means and variances of the signal and noise components for each channel in each cell category.
 
 ```{r channel_decomposition_2}
-estimated_coeffs <- purrr::pmap(coefficients |> dplyr::select(1:6), 
+estimated_coeffs <- purrr::pmap(coefficients |> dplyr::select(M_S_Immune_N_Islet,
+    V_S_Immune_N_Islet,
+    M_N_Immune_S_Islet,
+    V_N_Immune_S_Islet,
+    M_N_Immune_N_Islet,
+    V_N_Immune_N_Islet), 
       function(M_S_Immune_N_Islet, V_S_Immune_N_Islet, M_N_Immune_S_Islet, V_N_Immune_S_Islet,
                M_N_Immune_N_Islet, V_N_Immune_N_Islet) {
     
     # As additional constraints we introduce scaling factors between the signal + noise components.
     # Scaling factor between Islet signal (e.g. SST) and Immune signal (e.g. CD20) (estimated from the data)
-    fraction_mu <- (M_N_Immune_S_Islet - M_N_Immune_N_Islet/2) /(M_S_Immune_N_Islet- M_N_Immune_N_Islet/2)
+    fraction_mu <- (M_N_Immune_S_Islet - M_N_Immune_N_Islet/2) / (M_S_Immune_N_Islet- M_N_Immune_N_Islet/2)
     # Scaling factor between sigma SST signal and sigma CD20 signal (estimated from the data)
     # -> This is a strong assumption and might not be true in reality.
     fraction_sigma <- (V_S_Immune_N_Islet - V_N_Immune_N_Islet/2)/(V_N_Immune_S_Islet - V_N_Immune_N_Islet/2)
     # -> we assume that the same fractions apply for the noise. 
+
+    message("Fraction mu: ", fraction_mu, " Fraction sigma: ", fraction_sigma)
+    message("1: ", M_S_Immune_N_Islet, 
+            "2: ", V_S_Immune_N_Islet, 
+            "3: ", M_N_Immune_S_Islet, 
+            "4: ", V_N_Immune_S_Islet,
+            "5: ", M_N_Immune_N_Islet,
+            "6: ", V_N_Immune_N_Islet)
 
     # Augmented coefficient matrix
     A <- rbind(
@@ -304,8 +321,9 @@ estimated_coeffs <- purrr::pmap(coefficients |> dplyr::select(1:6),
       c(0, 0, 0, 0, 0, 1, 1, 0),  # V_N_Immune_S_Islet = sigma2_N_CD20 + sigma2_S_SST
       c(0, 0, 0, 0, 0, 0, 1, 1),   # V_N_Immune_N_Islet = sigma2_N_SST + sigma2_N_CD20
       c(fraction_mu, -1, 0, 0, 0, 0, 0, 0),  # fraction_mu * mu_S_CD20 - S_SST = 0
-      c(0,0,fraction_mu,-1, 0, 0, 0, 0),  # fraction_mu * mu_N_CD20 - mu_N_SST = 0
+      c(0,0,fraction_mu,-1, 0, 0, 0, 0)  # fraction_mu * mu_N_CD20 - mu_N_SST = 0
     )
+    message("A: ", A)
 
     # Right-hand side (means and variances combined)
     B <- c(
@@ -313,14 +331,16 @@ estimated_coeffs <- purrr::pmap(coefficients |> dplyr::select(1:6),
       V_S_Immune_N_Islet, V_N_Immune_S_Islet, V_N_Immune_N_Islet, 0,0
     )
 
-    # Solve by non-negative least squares
+    message("B: ", B)
+
+    # Solve by non-negative least squares. Counts should not be negative here.
     fit_nnls <- nnls::nnls(A, B)   # Solve the joint system
     coefs <- coef(fit_nnls)
 
     names(coefs) <- c("mu_S_Immune", "mu_S_Islet", "mu_N_Immune", "mu_N_Islet", 
                       "sigma2_S_Immune", "sigma2_S_Islet", "sigma2_N_Immune", "sigma2_N_Islet")
     coefs
-}) |> bind_rows() |> mutate(channel = channels_compressed) 
+}) |> dplyr::bind_rows() |> dplyr::mutate(channel = channels_compressed) 
 ```
 
 Inspect the estimated coefficients.
@@ -406,7 +426,7 @@ results <-
       # Get compressed value per cell.
       Immune_Islet_obs <- assay(sce_isl, "exprs")[channel, ][i]
       
-      # Define optimization bounds.
+      # Define optimization bounds. between [0, threshold_Immune-Noise]
       lower_bound1 <- ifelse(mu_N_Immune - sigma2_N_Immune < 0, 0, mu_N_Immune - sigma2_N_Immune)
       upper_bound1 <- ifelse(mu_N_Immune + sigma2_N_Immune > threshold_Immune, threshold_Immune, mu_N_Immune + sigma2_N_Immune)
       interval <- c(lower_bound1, upper_bound1)
@@ -458,11 +478,11 @@ results_optim
 
 Check the results.
 ```{r plot-islet-decomposition}
-channel_oi <- "CD3_NKX6_1"
+channel_oi <- "CD8a_INS"
 # Split channels_oi into Immune and Islet
 channel_oi2 <- channel_oi |> stringr::str_split("_") |> unlist()
 channel_Immune <- channel_oi2[1]
-channel_Islet <- ifelse(channel_oi == "CD3_NKX6_1", "NKX6_1", channel_oi2[2])
+channel_Islet <- ifelse(channel_oi == "CD8a_INS", "INS", channel_oi2[2])
 
 ## Get parameters for the channel of interest
 mu_S_Islet <- full_coeffs |> dplyr::filter(channel == channel_oi) |> pull("mu_S_Islet")
@@ -478,20 +498,20 @@ sigma2_S_Islet <- full_coeffs |> dplyr::filter(channel == channel_oi) |> pull("s
 
 # Compressed channel:
 ggplot(tibble(x = assay(sce_isl, "exprs")[channel_oi, ]), aes(x=x)) + geom_density() + 
-  geom_vline(xintercept = mu_S_Islet + mu_N_Immune, color = "yellow") + 
-  geom_vline(xintercept = mu_S_Islet, color = "red") + 
-  geom_vline(xintercept = threshold_Islet, color = "green") + 
-  geom_vline(xintercept = mu_N_Islet, color = "blue") + 
-  ggtitle(channel_oi)# Density plot:
+  geom_vline(xintercept = mu_S_Islet + mu_N_Immune, color = "yellow") + # Islet signal + Immune noise
+  geom_vline(xintercept = mu_S_Islet, color = "red") + # Islet signal (INS_S)
+  geom_vline(xintercept = threshold_Islet, color = "green") + # threshold.
+  geom_vline(xintercept = mu_N_Islet, color = "blue") +  # mean Islet noise (INS_N)
+  ggtitle(channel_oi) # Density plot.
 
 # Signal Islet Channel
 ggplot(results_optim, aes(x = get(channel_Islet))) + geom_density() + 
-    geom_vline(xintercept = mu_S_Islet, color = "red") + 
-    geom_vline(xintercept = threshold_Islet, color = "green") + 
-    geom_vline(xintercept = mu_N_Islet, color = "blue") + 
+    geom_vline(xintercept = mu_S_Islet, color = "red") +  # INS signal.
+    geom_vline(xintercept = threshold_Islet, color = "green") + # threshold.
+    geom_vline(xintercept = mu_N_Islet, color = "blue") + # mean Islet noise (INS_N).
     ggtitle("Islet")
 
-# Noise Immune Channel
+# Noise Immune Channel -> this doesnt work great.
 ggplot(results_optim, aes(x = get(channel_Immune))) + geom_density() + 
   geom_vline(xintercept = mu_N_Immune, color = "blue") + 
   ggtitle("Immune")
@@ -508,7 +528,7 @@ df_decomposed <- df |>
   mutate(CD44 = results_optim$CD44) |>
   mutate(CD8a = results_optim$CD8a) |> 
   mutate(CD4 = results_optim$CD4) |>
-  mutate(CD3 = results_optim$CD3) |>
+  mutate(CD3e = results_optim$CD3e) |>
   mutate(CD20 = results_optim$CD20) |>
   mutate(GCG = results_optim$GCG) |>
   mutate(INS = results_optim$INS) |>
@@ -520,13 +540,12 @@ df_decomposed <- df |>
 fn_panel <- file.path(paths$folder_in, paste0("panel_", "Uncompressed", ".csv"))
 panel <- read.csv(fn_panel, row.names = 1)
 
-# Create a new SCE object.
+# Create a new SCE object. 
 sce_isl_2 <- SpatialExperiment(
     assays = list(exprs = as.matrix(t(df_decomposed))), 
     colData = colData(sce_isl), 
     spatialCoords = spatialCoords(sce_isl),
-    metadata = metadata(sce_isl),
-    rowData = panel)
+    metadata = metadata(sce_isl))
 ```
 
 
@@ -602,14 +621,16 @@ colnames(results_immune_optim) <- channels_uncompressed
 results_immune_optim
 ```
 
-Check the results.
-Note: given that the Immune CHannel usually has less signal, the decomposition is more challenging.
+Check the results. 
+Note: given that the Immune Channel usually has **less signal**, the decomposition is more challenging.
+-> Unfortunately, especially CD20 and CD3e dont have great signal.
+
 ```{r plot-immune-islet-decomp}
-channel_oi <- "CD20_SST"
+channel_oi <- "CD8a_INS"
 # Split channels_oi into Immune and Islet
 channel_oi2 <- channel_oi |> stringr::str_split("_") |> unlist()
 channel_Immune <- channel_oi2[1]
-channel_Islet <- ifelse(channel_oi == "CD3_NKX6_1", "NKX6_1", channel_oi2[2])
+channel_Islet <- ifelse(channel_oi == "CD3e_NKX6_1", "NKX6_1", channel_oi2[2])
 
 ## Get parameters for the channel of interest
 mu_S_Islet <- full_coeffs |> dplyr::filter(channel == channel_oi) |> pull("mu_S_Islet")
@@ -653,7 +674,7 @@ df_decomposed <- df |>
   mutate(CD44 = results_immune_optim$CD44) |>
   mutate(CD8a = results_immune_optim$CD8a) |> 
   mutate(CD4 = results_immune_optim$CD4) |>
-  mutate(CD3 = results_immune_optim$CD3) |>
+  mutate(CD3e = results_immune_optim$CD3e) |>
   mutate(CD20 = results_immune_optim$CD20) |>
   mutate(GCG = results_immune_optim$GCG) |>
   mutate(INS = results_immune_optim$INS) |>
@@ -670,8 +691,7 @@ sce_immune_2 <- SpatialExperiment(
     assays = list(exprs = as.matrix(t(df_decomposed))), 
     colData = colData(sce_immune), 
     spatialCoords = spatialCoords(sce_immune),
-    metadata = metadata(sce_immune),
-    rowData = panel)
+    metadata = metadata(sce_immune))
 sce_immune_2
 ```
 
@@ -770,12 +790,12 @@ df_decomposed <- df |>
   mutate(CD44 = results_rest_optim$CD44) |>
   mutate(CD8a = results_rest_optim$CD8a) |> 
   mutate(CD4 = results_rest_optim$CD4) |>
-  mutate(CD3 = results_rest_optim$CD3) |>
+  mutate(CD3e = results_rest_optim$CD3e) |>
   mutate(CD20 = results_rest_optim$CD20) |>
   mutate(GCG = results_rest_optim$GCG) |>
   mutate(INS = results_rest_optim$INS) |>
   mutate(SST = results_rest_optim$SST) |> 
-  mutate(NKX6_1 = results_rest_optim$NKX6.1) |>
+  mutate(NKX6_1 = results_rest_optim$NKX6_1) |>
   mutate(ProINS = results_rest_optim$ProINS)
 
 # Uncomrpessed panel now as rowData. 
@@ -787,8 +807,7 @@ sce_rest_2 <- SpatialExperiment(
     assays = list(exprs = as.matrix(t(df_decomposed))), 
     colData = colData(sce_rest), 
     spatialCoords = spatialCoords(sce_rest),
-    metadata = metadata(sce_rest),
-    rowData = panel)
+    metadata = metadata(sce_rest))
 
 sce_rest_2
 ```
@@ -811,7 +830,6 @@ saveRDS(sce, fn)
 
 We now perform cell type annotation in 3 steps. 
 First, for the Islet cells using the decompressed data.
-
 
 ## Dimensionality Reduction to check for uncompressed marker distribution
 RUN UMAP.
@@ -839,6 +857,7 @@ reducedDim(sce_sub, dimred_name) <- cur_umap
 
 
 ```{r dimred-clusters}
+cur_dimred <- "UMAP_exprs"
 cur_dat <- scuttle::makePerCellDF(sce_sub, features = rownames(sce_sub),
                                   exprs_values = cur_assay) |>
                 dplyr::select(c(all_of(channels_uncompressed), paste0(dimred_name, ".1"), 
@@ -855,7 +874,7 @@ p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
 
 
 print(p)
-fn <- paste0(paste(today, "Categories_Decomposed", clust_name, cur_dimred,
+fn <- paste0(paste(today, "Categories_Decomposed", cur_dimred,
                     sep = "_"), ".png")
 do.call(ggsave, c(list(fn, p), plotsave_param))
 ```
@@ -867,7 +886,7 @@ channels_islet <- c("GCG", "PCSK2", # Alpha-Cells:
                     "INS", "SST", "NKX6_1", "ProINS", "IAPP", # Beta-cells:
                     "SST", "PDX1", # Delta-cells. PDX1 also beta-cells
                     "PPY", # Gamma cells.
-                    "SYP", "CD99", "ECDH" # General markers.
+                    "SYP", "CD99", "Ecdh", "CD31" # General markers and included just in case.
                     )
 
 sce_isl_3 <- sce[channels_islet, sce$cell_category == "Islet"]
@@ -933,9 +952,16 @@ heatmaply::heatmaply(
     file = file.path(paths$folder_script, fn))
 ```
 
-Looks more or less okay, just NKX6.1 clusters wih SST, which is not ideal.
-In data noticable, that clusters: 
--> 17, 14, 13, 16, 15, 5 are all from 6396.
+Beta: 6, 12, 7, 9, 14, 13, 10, 11
+Delta: 2, 1
+Gamma: 20
+alpha-cells: 19, 17, 15, 18, 16, 3, 8
+Other: 5, 
+alpha/beta mixed: 4
+
+
+13, 10, 11
+
 
 ```{r cellcats-pheno-scaled}
 clust_methods <- c("Pheno1")
@@ -945,11 +971,11 @@ clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-clust_other <- c(8, 10)
-clust_delta <- c(12)
-clust_beta <- c(5:7, 9) 
-clust_gamma <- c(14)
-clust_alpha <- c(1:4, 11, 13, 15:17) # until 14 confirmed.
+clust_other <- c(5, 4, 20)
+clust_delta <- c(2, 1)
+clust_beta <- c(6, 12, 7, 9, 14, 13, 10) 
+clust_gamma <- c()
+clust_alpha <- c(19, 17, 15, 18, 16, 3, 8, 11) 
 all_clust <- sort(c(clust_other, clust_delta, clust_beta, clust_gamma,
                     clust_alpha))
 
@@ -983,12 +1009,46 @@ colData(sce_isl_3) |>
 
 ## Visualize clusters on reduced dimensions
 
+
+```{r}
+imgloader <- function(x, image_dir, image_names,
+                     suffix_rem = "", suffix_add = "",
+                     bit_depth = 16, type, ...) {
+  require(cytomapper)
+
+  image_list <- file.path(image_dir, image_names)
+
+  # Test if the image list exist
+  test_exist <- which(!file.exists(image_list))
+  if (length(test_exist) > 0) {
+    stop(c("The following images were not found:\n",
+           paste(image_list[test_exist], collapse = "\n")))
+  } else {
+    # Load and scale the images
+    images <- loadImages(image_list, ...)
+    # images <- scaleImages(images, (2 ^ bit.depth) - 1)
+
+    # Add image names to metadata
+    mcols(images)$ImageName <- gsub(suffix_rem, "", names(images))
+    mcols(images)$ImageName <- paste0(mcols(images)$ImageName, suffix_add)
+
+    # Add channel names
+    if (type == "stacks") {
+      print("Loading image stacks")
+      channelNames(images) <- rownames(x)
+    }
+
+    return(images)
+  }
+}
+```
+
 ### Select cluster(s) and assay to show
 
 ```{r viz-clust-select}
 colData(sce_isl)$Pheno1_exprs <- sce_isl_3[, colnames(sce_isl)]$Pheno1_exprs
 
-viz_clust <- c(10, 4, 2, 5, 8) # Select cluster(s) to visualize.
+viz_clust <- c(9, 10, 5, 1, 3, 2, 6) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "exprs"
 ```
@@ -1061,7 +1121,7 @@ if (!is.null(viz_clust)) {
 
 ## Immune Cells:
 ```{r immune-cells}
-channels_immune <- c("CD3", "CD4", "CD8a", "CD45RA", "FOXP3", # T-cells: 
+channels_immune <- c("CD3e", "CD4", "CD8a", "CD45RA", "FOXP3", "CD45RO", # T-cells: 
                     "CD20", # B-cells. Likely almost absent.
                     "CD44", 
                      "CD68", # Macrophages.
@@ -1125,6 +1185,13 @@ heatmaply::heatmaply(
     file = file.path(paths$folder_script, fn))
 ```
 
+T-CD8: 13
+T-CD4: 22, 
+NK: 6
+Other: 5, 10, 7, 19, 11, 3, 14, 9, 2, 18, 12, 21
+Neutrophil: 20, 15
+Mos: 23, 17, 16, 1
+
 ```{r celltypes-immune-pheno-scaled}
 clust_methods <- c("Pheno1")
 clust_assay <- c("exprs")
@@ -1133,13 +1200,13 @@ clust_name <- paste(clust_methods, clust_assay, sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-clust_tcd4 <- c(21)
-clust_tcd8 <- c(19) # 14 confirmed.
+clust_tcd4 <- c(22)
+clust_tcd8 <- c(13) # 14 confirmed.
 clust_tdn <- c()
-clust_other <- c(20, 16, 17, 1, 6, 7, 9, 10, 11, 14) # 6 = likely NK-cells.
+clust_other <- c(6, 5, 10, 7, 19, 11, 3, 14, 9, 2, 18, 12, 21) 
 clust_B <- c()
-clust_neutrophil <- c(3, 4) # confirmed.
-clust_macrophage <- c(15, 12, 13, 8, 5, 2, 18) # 15, 7 confirmed.
+clust_neutrophil <- c(20, 15) # confirmed.
+clust_macrophage <- c(23, 17, 16, 1, 4, 8) # 15, 7 confirmed.
 
 all_clust <- sort(c(clust_tcd4, clust_tcd8, clust_tdn, clust_B, clust_neutrophil,
                     clust_macrophage, clust_other))
@@ -1184,7 +1251,7 @@ colData(sce_immune_3) |>
 ```{r viz-clust-select}
 colData(sce_immune)$Pheno1_exprs <- sce_immune_3[, colnames(sce_immune)]$Pheno1_exprs
 
-viz_clust <- c(20, 14, 11, 10, 18) # Select cluster(s) to visualize.
+viz_clust <- c(1:19) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "exprs"
 ```
@@ -1255,14 +1322,14 @@ if (!is.null(viz_clust)) {
 
 ## Exocrine + Stroma Cells:
 ```{r exocrine-cells}
-channels_exo <- c("ECDH", 
+channels_exo <- c("Ecdh", 
                   "CD44", # Pan-Exo 
-                  "KRT19", 
+                  "CK19", 
                   "PDX1", # Ductal cells
                   "SMA", # Smooth Muscle; Activated Fibroblasts.
-                  "AMY", # Acinar
-                  "CAIX", # 
-                  "CD31") # Endothelial)
+                  "AMY", # Acinar 
+                  "CD31", # Endothelial)
+                  "CA9") 
 
 sce_exo_3 <- sce_rest_2[channels_exo, ]
 ```
@@ -1310,18 +1377,24 @@ message(cur_assay)
 hm <- summarize_heatmap(sce_exo_3, expr_values = cur_assay,
                         cluster_by = clust_name,
                         channels = channels_exo)
-
+hm
 # Display the heatmap
 fn <- paste0(paste(today, "Clusters", clust_name, "EXOCRINE", "Heatmap",
                     sep = "_"), ".html")
 heatmaply::heatmaply(
-    heatmaply::normalize(hm), main = clust_name, 
+    hm, main = clust_name, 
     file = file.path(paths$folder_script, fn))
 ```
 
 ```{r cellcats-pheno-scaled}
 sce_rest
 ```
+
+Other: 8, 4, 7, 23, 15, 12, 3
+Acinar: 26, 29, 30, 28, 27, 13, 14, 24, 25, 21, 20, 22, 6, 2, 
+Ductal: 31, 16, 11, 10, 8, 17
+Fibro_SM: 5, 19
+Endothelail: 18, 1
 
 ```{r cellcats-pheno-scaled}
 clust_methods <- c("Pheno1")
@@ -1337,11 +1410,11 @@ print(clust_name)
 #clust_fibro_sm <- c(1)
 #clust_endo <- c(14)
 
-clust_other <- c(10, 6, 11, 2)
-clust_acinar <- c(24, 15, 7, 8, 9, 23, 17, 12, 4, 5, 16, 19)
-clust_ductal <- c(13, 18, 22, 14, 21, 20)
-clust_fibro_sm <- c(3)
-clust_endo <- c(1)
+clust_other <- c(4, 7, 23, 15, 12, 3)
+clust_acinar <- c(26, 29, 30, 28, 27, 13, 14, 24, 25, 21, 20, 22, 6, 2)
+clust_ductal <- c(31, 16, 8:11, 17)
+clust_fibro_sm <- c(5, 19)
+clust_endo <- c(18, 1)
 
 all_clust <- sort(c(clust_acinar, clust_ductal, clust_fibro_sm, clust_endo, clust_other))
 
@@ -1409,6 +1482,8 @@ names(assay_sel) <- c("exprs")
 
 ```{r cellcats-dimred}
 sce_sub$cell_type <- sce[, metadata(spe)$subset]$cell_type
+sce_sub <- sce_sub[, sce_sub$cell_type != "Other"]
+
 
 # Prepare the data
 cur_dat <- makePerCellDF(sce_sub, use_dimred = TRUE) |>
@@ -1432,7 +1507,7 @@ do.call(ggsave, c(list(fn, p), plotsave_param))
 
 ```{r cellcats-heatmap}
 clust_name <- "cell_type"
-channels_heatmap <- rownames(sce)[!rownames(spe) %in% c("DNA1", "DNA3", "H3", "Rb", "PTPRN", "GLUT1", "FOXP3")]
+channels_heatmap <- rownames(sce)[!rownames(sce) %in% c("CD44", "PPY", "CA9", "DNA1", "DNA3", "H3", "PTPRN", "GLUT1", "FOXP3", "CD45RA")]
 
 # Summarize the data
 hm <- summarize_heatmap(sce[, metadata(sce)$subset],
@@ -1448,3 +1523,8 @@ heatmaply(
 heatmaply::normalize(hm), main = clust_name,
 file = file.path(paths$folder_script, fn))
 ```
+
+Problem: 
+- SST. CD45RA.
+Good: CD8a_INS.
+- 

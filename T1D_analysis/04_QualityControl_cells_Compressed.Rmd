@@ -619,7 +619,7 @@ purrr::map(assay_sel, \(cur_assay) {
     message(dimred_name)
     p <- plot_dim_red(cur_dat, dimred_name, name_cur_var,
                       size = 0.5, palette = palettes[[cur_var]])
-    
+    print(p)
     fn <- paste0(paste(today, dimred_name, cur_var, sep = "_"), ".png")
     do.call(ggsave, c(list(fn, p), plotsave_param))
   })
@@ -659,7 +659,7 @@ purrr::map(assay_sel, \(cur_assay) {
     # Plot marker expression
     p <- plot_dim_red_channels(cur_dat, dimred_name, cur_assay,
                                 channels, force_points = TRUE)
-
+    print(p)
     fn <- paste0(paste(today, dimred_name, "Channels", sep = "_"), ".png")
     do.call(ggsave, c(list(fn, p), plotsave_param_large))
 })

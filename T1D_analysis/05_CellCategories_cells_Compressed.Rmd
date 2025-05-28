@@ -140,7 +140,8 @@ cat(c("\nChannels used for unsupervised clustering:",
 # Select Channels we will do our Category assignment on.
 channels_cat <- c("SYP", "AMY", "CK19", 
                   "CD45RA", "CD45RO", "MPO", "CD68", 
-                  "SMA", "CD31")
+                  "SMA", "CD31",
+                  "CD3e_NKX6_1", "CD4_ProINS", "CD44_GCG", "CD20_SST", "CD8a_INS")
 cat(c("\nChannels used for cell category assignment:",
       channels_cat[channels_cat %in% rownames(spe)]))
 ```
@@ -328,7 +329,7 @@ Additional information we can use is their spatial localization of cell types, i
 ### Select cluster(s) and assay to show
 
 ```{r viz-clust-select}
-viz_clust <- c(9, 15, 8, 3, 6, 5, 2) # Select cluster(s) to visualize.
+viz_clust <- c(1:29) # Select cluster(s) to visualize.
 viz_method <- "Pheno1"
 viz_assay <- "scaled"
 ```
@@ -371,7 +372,7 @@ imgloader <- function(x, image_dir, image_names,
 ### Load images and masks
 
 ```{r viz-cluster-load}
-spe$Pheno1_scaled_cat <- sce_cat$Pheno1_scaled_cat
+spe$Pheno1_scaled_cat <- factor(sce_cat$Pheno1_scaled_cat, levels = 1:29)
 
 if (!is.null(viz_clust)) {
   nb_images <- 14
@@ -427,9 +428,9 @@ if (!is.null(viz_clust)) {
                     img_id = "ImageName", 
                     cell_id = "cell_number")
 
-  if (interactive()) {
-    shiny::runApp(app)
-  }
+  #if (interactive()) {
+  #  shiny::runApp(app)
+  #}
 }
 ```
 
@@ -458,18 +459,18 @@ clust_name <- paste(clust_methods, clust_assay, "cat", sep = "_")
 print(clust_name)
 
 # Define which clusters correspond to which cell types
-# 
-# Mesenchymal: 28, 1, 4, 26,
-# Exocrine: 26, 27, 25, 23, 7, 14, 17, 11, 13, 6, 5, 2, 3.
-# Islet: 21, 18, 19, 10.
-# Immune: 29, 22, 24, 12.
-# Other: 9, 15, 8.
+# Islet: 16:19, 10
+# Exocrine: 26, 22, 23, 11, 20, 8, 6, 21 
+# Other: 2, 3, 13, 10, 1, 5
+# Stroma: 13, 4, 25
+# Immune: 7, 12, 15, 24, 27, 14
+# 9
 
-clust_other <- c(9, 15, 8)
-clust_islet <- c(21, 18, 19, 10)
-clust_immune <- c(29, 22, 24, 12)
-clust_stroma <- c(28, 1, 4, 16, 20)
-clust_exocrine <- c(26, 27, 25, 23, 7, 14, 17, 11, 13, 6, 5, 2, 3)
+clust_other <- c(2, 3, 1, 5)
+clust_islet <- c(16:19, 10)
+clust_immune <- c(7, 12, 15, 24, 27, 14, 9)
+clust_stroma <- c(13, 4, 25)
+clust_exocrine <- c(26, 22, 23, 11, 20, 8, 6, 21)
 
 all_clust <- sort(c(clust_islet, clust_immune, clust_exocrine, clust_stroma,clust_other))  
 

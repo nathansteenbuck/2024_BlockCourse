@@ -31,6 +31,8 @@ knitr::opts_chunk$set(echo = TRUE)
 In the following scripts, cell types are attributed to all cells in the dataset
 in an iterative way:
 
+Rscript -e "rmarkdown::render('2024_BlockCourse/T1D_analysis/05_CellCategories_cells_Uncompressed.Rmd')"
+
 - `05_CellCategories_cells_Uncompressed` (this script): Attribution of cell types from the uncompressed dataset.
 
 This is performed by performing PhenoGraph clustering using the Rphenoannoy package.
@@ -77,6 +79,40 @@ fn_spe <- file.path(paths$folder_out, paste0(paths$object_type, "_", paths$panel
 spe <- readRDS(fn_spe)
 print(spe)
 ```
+
+```{r}
+imgloader <- function(x, image_dir, image_names,
+                     suffix_rem = "", suffix_add = "",
+                     bit_depth = 16, type, ...) {
+  require(cytomapper)
+
+  image_list <- file.path(image_dir, image_names)
+
+  # Test if the image list exist
+  test_exist <- which(!file.exists(image_list))
+  if (length(test_exist) > 0) {
+    stop(c("The following images were not found:\n",
+           paste(image_list[test_exist], collapse = "\n")))
+  } else {
+    # Load and scale the images
+    images <- loadImages(image_list, ...)
+    # images <- scaleImages(images, (2 ^ bit.depth) - 1)
+
+    # Add image names to metadata
+    mcols(images)$ImageName <- gsub(suffix_rem, "", names(images))
+    mcols(images)$ImageName <- paste0(mcols(images)$ImageName, suffix_add)
+
+    # Add channel names
+    if (type == "stacks") {
+      print("Loading image stacks")
+      channelNames(images) <- rownames(x)
+    }
+
+    return(images)
+  }
+}
+```
+
 
 # **Clustering**
 
